@@ -1,7 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://vzcqovskvkeczrvpeqmx.supabase.co"
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6Y3FvdnNrdmtlY3pydnBlcW14Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTIyMzMxOSwiZXhwIjoyMTA0Nzk5MzE5fQ.AfV2bbbIFWV6Sp3HfzZsCtFgnehIWTfExSYzc6PTQpg"
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const initialPassword = process.env.ADMIN_INITIAL_PASSWORD || process.env.ADMIN_PASSWORD
+
+if (!supabaseUrl || !serviceRoleKey || !initialPassword) {
+  throw new Error('Environment variables NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and ADMIN_INITIAL_PASSWORD are required.')
+}
 
 const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false }
@@ -9,8 +14,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 async function run() {
   const emails = ['yec2026@gmail.com', 'acarayec@yec.id']
-  const username = 'acarayec'
-  const password = 'acarayec'
+  const password = initialPassword
   const name = 'Admin YEC 2026'
 
   for (const email of emails) {

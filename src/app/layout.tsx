@@ -24,6 +24,11 @@ const dmSerifDisplay = DM_Serif_Display({
 export const metadata: Metadata = {
   title: "Young Entrepreneur Camp — Competition Platform",
   description: "Platform manajemen kompetisi Young Entrepreneur Camp (YEC)",
+  icons: {
+    icon: "/logo-yec.jpeg",
+    shortcut: "/logo-yec.jpeg",
+    apple: "/logo-yec.jpeg",
+  },
 };
 
 export default function RootLayout({

@@ -1,8 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 import { hashPin } from '../src/lib/security/pin'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://vzcqovskvkeczrvpeqmx.supabase.co"
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6Y3FvdnNrdmtlY3pydnBlcW14Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTIyMzMxOSwiZXhwIjoyMTA0Nzk5MzE5fQ.AfV2bbbIFWV6Sp3HfzZsCtFgnehIWTfExSYzc6PTQpg"
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!supabaseUrl || !serviceRoleKey) {
+  throw new Error('Environment variables NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.')
+}
 
 const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false }
