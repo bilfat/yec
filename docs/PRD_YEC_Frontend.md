@@ -182,22 +182,28 @@ Landing page berisi:
 10. Footer
 
 ### 6.2 Participant
-Bisa tetap satu route utama atau route khusus, misalnya:
+Akses via halaman:
 ```text
 /portal
 ```
 
-State ditentukan server dari kondisi tim.
+Alur Antarmuka Peserta (Single-Page Seamless Experience):
+1. **Persistent Header/Navbar**: `PublicNavbar` (`Beranda | Tentang | Portal Tim`) tetap tampil di bagian atas halaman `/portal`.
+2. **Pre-Login State**:
+   - Menampilkan judul "Portal Tim" & penjelasan fungsi portal.
+   - Layout 2 kolom: Kiri penjelasan fitur/manfaat, Kanan Form Login (Select Nama Tim + Input PIN 6 digit).
+3. **In-Place Authentication**:
+   - Pengguna submit login tanpa pindah halaman (tanpa full-page route redirect).
+   - Form login bertransisi secara mulus (*in-place animation*) menampilkan Dashboard Tim langsung di bawah header.
+4. **Interactive Demo Bar (Development/Testing Mode)**:
+   - Panel switcher warna amber di bawah header untuk mensimulasikan seluruh kondisi tim:
+     - `READY` (Unggah BMC + Sub-tema)
+     - `SUBMITTED` (Konfirmasi BMC Tersubmit)
+     - `WAITING_RESULT` (Banner status evaluasi sedang berlangsung)
+     - `PASSED` (Banner celebratory Lolos + Unggah Presentasi Pitching)
+     - `FAILED` (Banner motivasi warm & optimistic)
+5. **Kontak Support**: Direct link WhatsApp ke Panitia (`081219843922`).
 
-UI state:
-- Access form.
-- BMC ready to submit.
-- BMC submitted.
-- Waiting result.
-- BMC passed + Pitching upload.
-- BMC failed.
-- Pitching submitted.
-- Final result.
 
 ### 6.3 Admin
 ```text

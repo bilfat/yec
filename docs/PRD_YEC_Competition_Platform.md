@@ -3,10 +3,10 @@
 **Document:** Product Requirements Document
 **Version:** 1.0
 **Status:** Baseline / Ready for Development
-**Primary stack:** Next.js + React + TypeScript + Tailwind CSS + Prisma + PostgreSQL
+**Primary stack:** Next.js + React + TypeScript + Tailwind CSS + Supabase + PostgreSQL
 **Animation stack:** Framer Motion + GSAP + Lenis
 **Storage:** Supabase Storage / S3-compatible Object Storage
-**Authentication:** Auth.js
+**Authentication:** Supabase Auth
 
 ---
 
@@ -910,7 +910,7 @@ POST   /api/auth/logout
 GET    /api/auth/session
 ```
 
-Auth.js dapat menangani sebagian route internal; endpoint di atas hanya logical contract.
+Supabase Auth dapat menangani sebagian route internal; endpoint di atas hanya logical contract.
 
 ### Participant Access
 
@@ -1626,7 +1626,7 @@ Vercel
        │
        ├── Server Actions
        ├── Route Handlers
-       └── Prisma
+       └── Supabase
             │
             ▼
        PostgreSQL
@@ -1640,8 +1640,8 @@ Supabase Storage / R2
 Environment variables minimal:
 
 ```text
-DATABASE_URL
-AUTH_SECRET
+NEXT_PUBLIC_SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
 STORAGE_ENDPOINT / provider-specific vars
 STORAGE_BUCKET
 STORAGE_ACCESS_KEY
@@ -1657,9 +1657,9 @@ STORAGE_SECRET_KEY
 - Next.js setup.
 - TypeScript.
 - Tailwind.
-- Prisma.
+- Supabase.
 - PostgreSQL.
-- Auth.js.
+- Supabase Auth.
 - Design tokens.
 - UI primitives.
 
@@ -1758,8 +1758,8 @@ Lucide React
 ```text
 Next.js Route Handlers
 Next.js Server Actions
-Auth.js
-Prisma
+Supabase Auth
+Supabase
 PostgreSQL
 ```
 

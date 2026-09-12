@@ -1,922 +1,507 @@
-# PRD — Young Entrepreneur Camp (YEC) Competition Platform — **BACKEND**
+# PRD — YEC Competition Platform — BACKEND (v2.0)
 
-**Document:** Product Requirements Document (Backend Scope)
-**Version:** 1.0
-**Status:** Baseline / Ready for Development
-**Primary stack:** Next.js Route Handlers + Server Actions + Prisma + PostgreSQL
-**Authentication:** Auth.js
-**Storage:** Supabase Storage / S3-compatible Object Storage
-
-> Dokumen ini adalah hasil pemisahan dari PRD utama YEC Competition Management Platform, difokuskan khusus pada kebutuhan **server, API, database, dan business logic**. Untuk kebutuhan UI/UX, lihat **PRD_YEC_Frontend.md**.
+**Document:** Product Requirements Document — Backend
+**Version:** 2.0 (Disempurnakan sesuai Frontend Flow)
+**Status:** Ready for Implementation
+**Stack:** Next.js Route Handlers + Supabase (PostgreSQL, Auth, Storage) + Next.js Route Handlers
 
 ---
 
-## 1. Product Overview (Ringkasan)
+## 1. Overview
 
-### 1.1 Product Name
-**Young Entrepreneur Camp (YEC) Competition Management Platform**
+Backend YEC mengelola seluruh proses lomba dari konfigurasi, koleksi karya, penugasan juri, penilaian, hingga pengumuman juara. Tiga aktor:
 
-### 1.2 Product Purpose
-Backend mengelola seluruh proses lomba/proker YEC dari sisi administrasi, pengumpulan karya, penugasan juri, penilaian BMC, penilaian Pitching, hingga penentuan hasil dan juara — dengan tiga role:
+| Aktor | Autentikasi | Akses |
+|---|---|---|
+| **Admin** | Username + password (Supabase Auth JWT) | Full control |
+| **Juri** | Username + password (Supabase Auth JWT) | Hanya assignment miliknya |
+| **Peserta** | Nama Tim + PIN (cookie sendiri) | Hanya data tim sendiri |
 
-- **Admin** — konfigurasi lomba, tim, juri, penugasan, kriteria penilaian, hasil tahapan, juara.
-- **Peserta/Tim** — tanpa akun; autentikasi via Nama Tim + PIN yang di-hash.
-- **Juri** — akun username + password, otorisasi dibatasi hanya ke assignment miliknya.
-
-### 1.3 Backend-Relevant Product Principles
-
-1. **Dynamic evaluation.** Kriteria, point indikator, dan bobot dibuat Admin melalui sistem dan disimpan di database; tidak hardcode di frontend.
-2. **Resource-oriented API.** API dikelompokkan berdasarkan resource/domain, bukan berdasarkan halaman.
-3. **Server-authoritative.** Semua authorization, state transition, perhitungan nilai, dan lock dikontrol server.
-4. **File outside database.** PDF/PPT disimpan di object storage; database hanya menyimpan metadata/path.
-5. **No unnecessary realtime.** Tidak menggunakan WebSocket/realtime kecuali kebutuhan baru benar-benar muncul.
+> Admin dan Juri berbagi satu halaman login (`/login`). Redirect otomatis ke dashboard masing-masing berdasarkan role JWT.
 
 ---
 
-## 2. Goals & Non-Goals (Backend Scope)
+## 2. Prinsip Desain
 
-### 2.1 Goals
-- Autentikasi Admin/Juri dan akses PIN peserta yang aman.
-- CRUD sub-tema, template penilaian dinamis, juri, dan tim.
-- Plotting Juri per tim dan per kelompok kriteria (assignment scope).
-- Kalkulasi nilai berdasarkan point + bobot secara konsisten dan otoritatif di server.
-- Mengunci penilaian ketika Admin sudah menetapkan hasil tahap.
-- Business rule penentuan Juara 1, 2, 3.
-- Security boundary yang jelas untuk file dan data (signed URL, authorization check).
-
-### 2.2 Non-Goals untuk V1
-- Chat antar role.
-- Notifikasi realtime.
-- Pembayaran.
-- Video streaming.
-- WebSocket.
-- AI judging.
-- Microservices.
-- Public leaderboard realtime.
-- Sistem akun peserta individual.
+1. **Server-authoritative** — Authorization, state transition, kalkulasi nilai, dan lock semua dikontrol server.
+2. **Resource-based API** — API dikelompokkan berdasarkan resource/domain. Tidak dibuat endpoint baru hanya karena ada halaman baru.
+3. **Role-filtered response** — Response API otomatis membatasi field sesuai role. Frontend tidak boleh jadi filter terakhir.
+4. **File di luar database** — PDF/PPT disimpan di object storage; database hanya menyimpan metadata.
+5. **Kalkulasi di server** — Tidak ada perhitungan nilai di React sebagai source of truth.
 
 ---
 
-## 3. User Roles — Perspektif Authorization
+## 3. Database Schema
 
-### 3.1 Admin (Server-side permissions)
-- Full CRUD: settings, subthemes, announcements, judges, assignments, evaluation templates, teams.
-- Read all submissions, evaluations status.
-- Otorisasi menentukan Lolos/Tidak Lolos BMC — hanya bila seluruh assignment evaluation berstatus COMPLETED.
-- Otorisasi menentukan Juara — hanya untuk tim yang memenuhi syarat final.
-- Delete tim beserta cascade data relasional + storage objects.
-
-### 3.2 Peserta (Server-side permissions)
-Diperbolehkan (setelah validasi PIN):
-- Read state tim sendiri.
-- Create submission (BMC/Pitching) sesuai state stage dan status kelulusan.
-- Read hasil setelah dirilis Admin.
-
-Tidak diperbolehkan (harus ditolak di server, bukan hanya disembunyikan di UI):
-- Read data tim lain.
-- Read detail penilaian juri sebelum hasil dirilis.
-- Read data pribadi juri.
-- Mutasi apapun di luar submission miliknya sendiri.
-
-### 3.3 Juri (Server-side permissions)
-Diperbolehkan:
-- Read assignment miliknya saja (query harus authorization-aware, bukan filter di client).
-- Read submission yang menjadi assignment-nya (via signed URL).
-- Create/update evaluation scores untuk assignment miliknya, selama belum di-lock.
-
-Tidak diperbolehkan (harus divalidasi server):
-- Read/mutasi assignment/tim yang bukan miliknya.
-- Mengubah assignment.
-- Membuat/mengubah kriteria.
-- Menentukan kelulusan atau juara.
-- Mengelola akun juri lain.
-- Mengakses file tim lain secara langsung (tanpa signed URL yang tervalidasi).
-
----
-
-## 4. Competition Lifecycle — Server State & Business Rules
-
-### Stage 1 — BMC Submission
-```text
-BMC_SUBMISSION_OPEN = true
+### users
 ```
-Server memvalidasi sub-tema aktif dan stage terbuka sebelum menerima submission.
-
-### Stage 2 — BMC Evaluation
-Admin menutup submission dan mengaktifkan assignment Juri. Server membatasi akses evaluasi hanya untuk assignment yang valid.
-
-### Stage 3 — BMC Result
-Server memvalidasi seluruh assignment telah COMPLETED sebelum mengizinkan Admin menetapkan:
-- PASSED
-- FAILED
-
-Setelah hasil disimpan, server mengunci (lock) BMC evaluation — tidak menerima update lagi dari endpoint evaluasi.
-
-### Stage 4 — Pitching Submission
-Server hanya menerima upload dari tim dengan `result_status = PASSED` pada stage BMC.
-
-### Stage 5 — Pitching Evaluation
-Sama seperti Stage 2, dengan template Pitching aktif.
-
-### Stage 6 — Final Result
-Server menghitung/menyediakan data ranking; Admin menetapkan juara melalui endpoint yang divalidasi (rank unik, tim memenuhi syarat).
-
----
-
-## 5. Database Schema
-
-### 5.1 users
-```text
-id                 UUID PK
-name               VARCHAR(120)
-username           VARCHAR(80) UNIQUE
-password_hash      TEXT
-role               ENUM(ADMIN, JUDGE)
-active             BOOLEAN
-created_at         TIMESTAMP
-updated_at         TIMESTAMP
+id              UUID PK
+name            VARCHAR(120)
+username        VARCHAR(80) UNIQUE
+password_hash   TEXT
+role            ENUM(ADMIN, JUDGE)
+active          BOOLEAN DEFAULT true
+created_at      TIMESTAMP
+updated_at      TIMESTAMP
 ```
 
-### 5.2 teams
-```text
-id                 UUID PK
-name               VARCHAR(150) UNIQUE
-pin_hash           TEXT
-active             BOOLEAN
-created_at         TIMESTAMP
-updated_at         TIMESTAMP
+### teams
 ```
-Catatan: PIN plaintext tidak disimpan.
-
-### 5.3 competition_settings
-Satu row aktif.
-```text
-id                         UUID PK
-competition_name           VARCHAR(200)
-bmc_submission_open        BOOLEAN
-bmc_evaluation_open        BOOLEAN
-pitching_submission_open   BOOLEAN
-pitching_evaluation_open   BOOLEAN
-announcement_title         VARCHAR(200)
-announcement_content       TEXT
-participant_support_phone  VARCHAR(30)
-created_at                 TIMESTAMP
-updated_at                 TIMESTAMP
+id              UUID PK
+name            VARCHAR(150) UNIQUE
+pin_hash        TEXT         -- bcrypt/argon2, tidak pernah disimpan plaintext
+subtheme_id     UUID FK → subthemes.id NULL
+active          BOOLEAN DEFAULT true
+created_at      TIMESTAMP
+updated_at      TIMESTAMP
 ```
 
-### 5.4 subthemes
-```text
-id                 UUID PK
-name               VARCHAR(160)
-active             BOOLEAN
-sort_order         INT
-created_at         TIMESTAMP
-updated_at         TIMESTAMP
+### competition_settings _(satu row)_
+```
+id                        UUID PK
+competition_name          VARCHAR(200)
+bmc_submission_open       BOOLEAN DEFAULT false
+bmc_evaluation_open       BOOLEAN DEFAULT false
+pitching_submission_open  BOOLEAN DEFAULT false
+pitching_evaluation_open  BOOLEAN DEFAULT false
+announcement_title        VARCHAR(200) NULL
+announcement_content      TEXT NULL
+participant_support_phone VARCHAR(30) NULL
+updated_at                TIMESTAMP
 ```
 
-### 5.5 evaluation_templates
-```text
-id                 UUID PK
-name               VARCHAR(160)
-stage              ENUM(BMC, PITCHING)
-description        TEXT NULL
-active             BOOLEAN
-created_at         TIMESTAMP
-updated_at         TIMESTAMP
+### subthemes
 ```
-Rule: maksimal satu template aktif per stage.
-
-### 5.6 criteria
-```text
-id                 UUID PK
-template_id        UUID FK → evaluation_templates.id
-name               VARCHAR(160)
-weight             DECIMAL(5,2)
-sort_order         INT
-created_at         TIMESTAMP
-updated_at         TIMESTAMP
-```
-Constraint:
-```text
-weight >= 0
-weight <= 100
+id          UUID PK
+name        VARCHAR(160)
+active      BOOLEAN DEFAULT true
+sort_order  INT DEFAULT 0
+created_at  TIMESTAMP
+updated_at  TIMESTAMP
 ```
 
-### 5.7 criterion_points
-```text
-id                 UUID PK
-criterion_id       UUID FK → criteria.id
-name               VARCHAR(200)
-sort_order          INT
-created_at         TIMESTAMP
-updated_at         TIMESTAMP
+### evaluation_templates
+```
+id          UUID PK
+name        VARCHAR(160)
+stage       ENUM(BMC, PITCHING)
+description TEXT NULL
+active      BOOLEAN DEFAULT false   -- maks 1 aktif per stage
+created_at  TIMESTAMP
+updated_at  TIMESTAMP
 ```
 
-### 5.8 submissions
-```text
-id                 UUID PK
-team_id            UUID FK → teams.id
-stage              ENUM(BMC, PITCHING)
-subtheme_id        UUID NULL FK → subthemes.id
-original_filename  VARCHAR(255)
-storage_path       TEXT
-mime_type          VARCHAR(100)
-file_size          BIGINT
-submitted_at       TIMESTAMP
-updated_at         TIMESTAMP
+### criteria
 ```
-Unique rule:
-```text
-(team_id, stage)
-```
-satu submission aktif per stage.
-
-### 5.9 assignments
-```text
-id                    UUID PK
-judge_id              UUID FK → users.id
-team_id               UUID FK → teams.id
-stage                 ENUM(BMC, PITCHING)
-assignment_scope      ENUM(ALL, CRITERIA)
-created_at            TIMESTAMP
-updated_at            TIMESTAMP
+id          UUID PK
+template_id UUID FK → evaluation_templates.id (CASCADE DELETE)
+name        VARCHAR(160)
+weight      DECIMAL(5,2)  -- 0–100; total semua criteria dalam 1 template harus = 100
+sort_order  INT
+created_at  TIMESTAMP
+updated_at  TIMESTAMP
 ```
 
-Untuk assignment scope `CRITERIA`, perlu tabel penghubung:
+### criterion_points
+```
+id            UUID PK
+criterion_id  UUID FK → criteria.id (CASCADE DELETE)
+name          VARCHAR(200)
+sort_order    INT
+created_at    TIMESTAMP
+updated_at    TIMESTAMP
+```
 
-### 5.10 assignment_criteria
-```text
-assignment_id          UUID FK → assignments.id
-criterion_id           UUID FK → criteria.id
+### submissions
+```
+id                UUID PK
+team_id           UUID FK → teams.id
+stage             ENUM(BMC, PITCHING)
+subtheme_id       UUID FK → subthemes.id NULL
+original_filename VARCHAR(255)
+storage_path      TEXT
+mime_type         VARCHAR(100)
+file_size         BIGINT
+submitted_at      TIMESTAMP
+updated_at        TIMESTAMP
+
+UNIQUE (team_id, stage)   -- satu submission aktif per stage per tim
+```
+
+### assignments
+```
+id               UUID PK
+judge_id         UUID FK → users.id
+team_id          UUID FK → teams.id
+stage            ENUM(BMC, PITCHING)
+assignment_scope ENUM(ALL, CRITERIA)   -- ALL = nilai semua kriteria
+created_at       TIMESTAMP
+updated_at       TIMESTAMP
+```
+
+### assignment_criteria _(untuk scope=CRITERIA)_
+```
+assignment_id  UUID FK → assignments.id (CASCADE DELETE)
+criterion_id   UUID FK → criteria.id
 PRIMARY KEY (assignment_id, criterion_id)
 ```
-Dengan desain ini, satu Juri dapat menerima beberapa criteria.
 
-### 5.11 evaluations
-Satu record per assignment + submission.
-```text
-id                    UUID PK
-assignment_id         UUID FK → assignments.id
-submission_id         UUID FK → submissions.id
-status                ENUM(PENDING, COMPLETED)
-submitted_at          TIMESTAMP NULL
-updated_at            TIMESTAMP
+### evaluations
 ```
-Unique:
-```text
-(assignment_id, submission_id)
+id             UUID PK
+assignment_id  UUID FK → assignments.id
+submission_id  UUID FK → submissions.id
+status         ENUM(PENDING, COMPLETED) DEFAULT PENDING
+notes          TEXT NULL
+submitted_at   TIMESTAMP NULL
+updated_at     TIMESTAMP
+
+UNIQUE (assignment_id, submission_id)
 ```
 
-### 5.12 evaluation_scores
-Nilai per point.
-```text
-id                    UUID PK
-evaluation_id         UUID FK → evaluations.id
-criterion_point_id     UUID FK → criterion_points.id
-score                 DECIMAL(5,2)
-note                  TEXT NULL
-created_at             TIMESTAMP
-updated_at             TIMESTAMP
+### evaluation_scores
 ```
-Constraint:
-```text
-score >= 0
-score <= 100
+id                 UUID PK
+evaluation_id      UUID FK → evaluations.id (CASCADE DELETE)
+criterion_point_id UUID FK → criterion_points.id
+score              DECIMAL(5,2)   -- 0–100
+updated_at         TIMESTAMP
+
+UNIQUE (evaluation_id, criterion_point_id)
 ```
 
-### 5.13 team_stage_results
-```text
-id                    UUID PK
-team_id               UUID FK → teams.id
-stage                 ENUM(BMC, PITCHING)
-final_score           DECIMAL(6,2) NULL
-result_status         ENUM(PENDING, PASSED, FAILED)
-locked_at             TIMESTAMP NULL
-created_at             TIMESTAMP
-updated_at             TIMESTAMP
+### team_stage_results
 ```
-Unique:
-```text
-(team_id, stage)
+id            UUID PK
+team_id       UUID FK → teams.id
+stage         ENUM(BMC, PITCHING)
+final_score   DECIMAL(6,2) NULL   -- dihitung server
+result_status ENUM(PENDING, PASSED, FAILED) DEFAULT PENDING
+locked_at     TIMESTAMP NULL       -- setelah lock, evaluation tidak bisa diubah
+created_at    TIMESTAMP
+updated_at    TIMESTAMP
+
+UNIQUE (team_id, stage)
 ```
 
-### 5.14 final_results
-```text
-id                    UUID PK
-team_id               UUID FK → teams.id
-rank                  INT NULL
-final_score            DECIMAL(6,2) NULL
-created_at             TIMESTAMP
-updated_at             TIMESTAMP
+### final_results
 ```
-Constraint:
-```text
-rank ∈ {1,2,3} OR NULL
-```
-
-### 5.15 Optional audit_logs
-Untuk V1 dapat dibuat optional. Jika dibutuhkan:
-```text
-id
-actor_user_id
-action
-entity_type
-entity_id
-metadata_json
-created_at
-```
-Tidak wajib untuk versi pertama agar sistem tetap ringan.
-
----
-
-## 6. Database Relationship
-
-```text
-users
- ├── assignments
- │      └── assignment_criteria
- │
-teams
- ├── submissions
- ├── assignments
- ├── team_stage_results
- └── final_results
-
-submissions
- └── evaluations
-      └── evaluation_scores
-
- evaluation_templates
- └── criteria
-      └── criterion_points
-
-criteria
- └── assignment_criteria
+id          UUID PK
+team_id     UUID FK → teams.id UNIQUE
+rank        INT   -- hanya 1, 2, atau 3; maks satu tim per rank
+final_score DECIMAL(6,2) NULL
+created_at  TIMESTAMP
+updated_at  TIMESTAMP
 ```
 
 ---
 
-## 7. API Strategy
+## 4. API Routes
 
-### 7.1 Principle
-API berdasarkan resource/domain, bukan halaman.
+Semua endpoint mengikuti pola resource/domain. Response dibatasi berdasarkan role session.
 
-Bad:
-```text
-/api/admin/bmc/dashboard
-/api/admin/bmc/status
-/api/juri/bmc/team-list
-/api/peserta/bmc-status
+### 4.1 Auth (dikelola Supabase Auth)
+```
+POST  /api/auth/[...nextauth]   -- login, session, callback (Supabase Auth handler)
+```
+Halaman login: `/login` — satu form untuk Admin dan Juri.
+Setelah login, middleware redirect berdasarkan `session.user.role`:
+- `ADMIN` → `/admin/dashboard`
+- `JUDGE` → `/juri/dashboard`
+
+### 4.2 Participant Access _(session terpisah, bukan Supabase Auth)_
+```
+POST  /api/participant/access   -- validasi Nama Tim + PIN → set cookie yec_participant_session
+POST  /api/participant/logout   -- clear cookie
+GET   /api/participant/portal   -- state tim: stage, status, hasil (hanya tim sendiri)
 ```
 
-Good:
-```text
-/api/teams
-/api/submissions
-/api/assignments
-/api/evaluations
-/api/results
+Request `/api/participant/access`:
+```json
+{ "teamId": "uuid", "pin": "583921" }
 ```
-
-Response dibatasi berdasarkan role dan authorization.
-
----
-
-## 8. API Route Map
-
-### Authentication
-```text
-POST   /api/auth/login
-POST   /api/auth/logout
-GET    /api/auth/session
-```
-Auth.js dapat menangani sebagian route internal; endpoint di atas hanya logical contract.
-
-### Participant Access
-```text
-POST   /api/participant/access
-POST   /api/participant/logout
-GET    /api/participant/portal
-```
-
-`POST /api/participant/access` menerima:
+Response `/api/participant/portal`:
 ```json
 {
+  "teamName": "Tim Alpha",
   "teamId": "uuid",
-  "pin": "583921"
+  "stage": "BMC_READY | BMC_WAITING_RESULT | PASSED | PITCHING_READY | PITCHING_WAITING_RESULT | FAILED | CHAMPION",
+  "bmc_submission_open": true,
+  "pitching_submission_open": false,
+  "score": null,
+  "rank": null,
+  "announcement": { "title": "...", "content": "..." }
 }
 ```
-Response tidak mengembalikan `pin_hash`.
 
-### Settings
-```text
-GET    /api/settings
-PUT    /api/settings
+### 4.3 Settings
 ```
-Admin-only untuk update. Public/participant hanya menerima fields yang memang boleh ditampilkan.
+GET  /api/settings   -- public (field terbatas): competition_name, announcement, support_phone
+PUT  /api/settings   -- Admin only: semua field
+```
 
-### Subthemes
-```text
-GET    /api/subthemes
-POST   /api/subthemes
-PUT    /api/subthemes/:id
-DELETE /api/subthemes/:id
+### 4.4 Subthemes
 ```
-POST/PUT/DELETE: Admin only.
+GET    /api/subthemes          -- public (hanya active=true)
+POST   /api/subthemes          -- Admin only
+PUT    /api/subthemes/:id      -- Admin only
+DELETE /api/subthemes/:id      -- Admin only
+```
 
-### Teams
-```text
-GET    /api/teams
-POST   /api/teams
-GET    /api/teams/:id
-DELETE /api/teams/:id
-GET    /api/teams/export-pin
+### 4.5 Teams
 ```
-Admin only kecuali endpoint yang dipakai participant untuk public team selection, dan response harus sangat terbatas.
+GET    /api/teams              -- Admin: semua data; Participant: hanya id + name (untuk dropdown)
+POST   /api/teams              -- Admin only; server generate PIN
+DELETE /api/teams/:id          -- Admin only; cascade delete submission + storage
+GET    /api/teams/export-pin   -- Admin only; CSV id,name,pin_plaintext (satu kali saja)
+```
 
-### Judges
-```text
-GET    /api/judges
-POST   /api/judges
-PUT    /api/judges/:id
-DELETE /api/judges/:id
+### 4.6 Judges
 ```
-Admin only.
+GET    /api/judges          -- Admin only
+POST   /api/judges          -- Admin only
+PUT    /api/judges/:id      -- Admin only
+DELETE /api/judges/:id      -- Admin only
+```
 
-### Assignments
-```text
-GET    /api/assignments
-POST   /api/assignments
-PUT    /api/assignments/:id
-DELETE /api/assignments/:id
+### 4.7 Assignments
 ```
-Admin only untuk mutasi. Juri hanya dapat membaca assignment miliknya melalui authorization-aware query.
+GET    /api/assignments          -- Admin: semua; Judge: hanya miliknya (dari token)
+POST   /api/assignments          -- Admin only
+DELETE /api/assignments/:id      -- Admin only
+```
+Saat GET oleh Juri, server filter `WHERE judge_id = session.user.id`.
 
-### Evaluation Templates
-```text
-GET    /api/evaluation-templates
-POST   /api/evaluation-templates
-GET    /api/evaluation-templates/:id
-PUT    /api/evaluation-templates/:id
-DELETE /api/evaluation-templates/:id
-POST   /api/evaluation-templates/:id/activate
+### 4.8 Evaluation Templates
 ```
-Admin only untuk perubahan.
+GET    /api/evaluation-templates          -- Admin & Judge (read only)
+POST   /api/evaluation-templates          -- Admin only
+GET    /api/evaluation-templates/:id      -- Admin & Judge; include criteria + points
+PUT    /api/evaluation-templates/:id      -- Admin only
+DELETE /api/evaluation-templates/:id      -- Admin only (hanya status DRAFT)
+POST   /api/evaluation-templates/:id/activate  -- Admin only; validate total weight = 100
+```
 
-### Submissions
-```text
-GET    /api/submissions
-POST   /api/submissions
-GET    /api/submissions/:id
+### 4.9 Submissions
 ```
-Upload mutasi harus melalui signed upload/presigned upload atau secure server upload. GET detail tetap authorization-aware.
+POST  /api/submissions          -- Participant (via cookie session); server validates stage + team state
+GET   /api/submissions/:id/view -- Judge (assigned only); returns short-lived signed URL untuk PDF Viewer
+```
+Server validasi sebelum menerima upload:
+- `bmc_submission_open = true` untuk BMC
+- `pitching_submission_open = true` untuk Pitching
+- Tim harus PASSED BMC untuk bisa Pitching
+- File: PDF only (BMC), PDF/PPT/PPTX (Pitching), max 10MB
 
-### Evaluations
-```text
-GET    /api/evaluations
-GET    /api/evaluations/:id
-POST   /api/evaluations
-PUT    /api/evaluations/:id
+### 4.10 Evaluations
 ```
-Juri hanya dapat membaca/mengubah evaluation yang merupakan assignment-nya dan belum lock.
+GET  /api/evaluations            -- Judge: daftar assignment + status (dashboard juri)
+GET  /api/evaluations/:id        -- Judge (assigned only): detail form penilaian + template
+PUT  /api/evaluations/:id        -- Judge (assigned only): simpan skor; jika isSubmit=true → status COMPLETED
+```
 
-### Results
-```text
-GET    /api/results
-GET    /api/results/:id
-PUT    /api/results/:id
+Request `PUT /api/evaluations/:id`:
+```json
+{
+  "scores": { "point_id_1": 85, "point_id_2": 90 },
+  "notes": "Catatan opsional",
+  "isSubmit": false
+}
 ```
-Admin mengubah result stage. Participant hanya membaca hasil tim sendiri melalui portal.
+Server validasi:
+- Evaluation belum LOCKED
+- Judge adalah pemilik assignment
+- Score 0–100 per point
 
-### Dashboard
-```text
-GET    /api/dashboard/summary
+### 4.11 Results (Admin view)
 ```
-Endpoint summary adalah exception berbasis use case agregasi, bukan halaman CRUD. Data hanya berupa count/statistik.
+GET  /api/results           -- Admin only; query param: ?stage=BMC|PITCHING
+PUT  /api/results/:id       -- Admin only; set result_status: PASSED | FAILED
+                            -- hanya jika semua assignment COMPLETED
+                            -- setelah berhasil: lock evaluation, hitung final_score
+```
+
+### 4.12 Dashboard
+```
+GET  /api/dashboard/summary  -- Admin only; aggregate count stats
+```
+Response:
+```json
+{
+  "totalTeams": 20,
+  "bmcSubmitted": 18,
+  "bmcPassed": 10,
+  "pitchingSubmitted": 9,
+  "evaluationPending": 3,
+  "finalTeams": 9
+}
+```
 
 ---
 
-## 9. API Authorization Matrix
+## 5. Authorization Matrix
 
-| Resource | Admin | Judge | Participant |
+| Endpoint | Admin | Juri | Peserta |
 |---|---|---|---|
-| Settings read | Yes | Limited | Public subset |
-| Settings write | Yes | No | No |
-| Teams read | All | Assigned only | Own only |
-| Teams write | Yes | No | No |
-| Judges | Yes | Own identity only | No |
-| Assignments | Full | Own only | No |
-| Evaluation template | Full | Read assigned structure | No |
-| Submission create | Admin/Participant rules | No | Own team |
-| Submission read | All | Assigned only | Own only |
-| Evaluation write | No | Assigned only | No |
-| Result write | Yes | No | No |
-| Result read | All | As needed | Own only |
+| `GET /api/settings` | Full | — | Field terbatas |
+| `PUT /api/settings` | ✅ | ❌ | ❌ |
+| `GET /api/teams` | Full data | ❌ | id+name saja |
+| `POST/DELETE /api/teams` | ✅ | ❌ | ❌ |
+| `GET /api/judges` | ✅ | ❌ | ❌ |
+| `POST/PUT/DELETE /api/judges` | ✅ | ❌ | ❌ |
+| `GET /api/assignments` | Semua | Miliknya saja | ❌ |
+| `POST/DELETE /api/assignments` | ✅ | ❌ | ❌ |
+| `GET /api/evaluation-templates` | ✅ | Read only | ❌ |
+| `POST /api/submissions` | ❌ | ❌ | Tim sendiri |
+| `GET /api/submissions/:id/view` | ✅ | Assigned only | ❌ |
+| `GET /api/evaluations` | ✅ | Miliknya saja | ❌ |
+| `GET/PUT /api/evaluations/:id` | ✅ | Assigned only | ❌ |
+| `GET /api/results` | ✅ | ❌ | ❌ |
+| `PUT /api/results/:id` | ✅ | ❌ | ❌ |
+| `GET /api/participant/portal` | ❌ | ❌ | Tim sendiri |
+| `GET /api/dashboard/summary` | ✅ | ❌ | ❌ |
 
 ---
 
-## 10. File Storage Architecture
+## 6. Competition Lifecycle & State Machine
 
-### 10.1 Storage
-Gunakan private bucket.
+### Peserta (State di server berdasarkan data DB)
+```
+LOGIN_REQUIRED
+  ↓ (POST /api/participant/access berhasil)
+BMC_READY          → bmc_submission_open = true
+  ↓ (POST /api/submissions)
+BMC_WAITING_RESULT → submission ada, result PENDING
+  ↓ (Admin PUT /api/results/:id)
+  ├── PASSED        → pitching_submission_open = true
+  └── FAILED        → End
 
-Example structure:
-```text
-competition/
+PITCHING_READY
+  ↓ (POST /api/submissions stage=PITCHING)
+PITCHING_WAITING_RESULT
+  ↓ (Admin tetapkan juara)
+CHAMPION / FINALIST / END
+```
+
+### Evaluation (Juri)
+```
+PENDING     → juri belum mulai
+COMPLETED   → juri submit (isSubmit: true)
+LOCKED      → Admin lock setelah set PASSED/FAILED
+```
+
+---
+
+## 7. Kalkulasi Nilai (Server Only)
+
+Di `lib/scoring/`:
+
+```ts
+// Per criteria dari satu juri:
+criteria_score = average(scores of all points in criteria)
+criteria_contribution = criteria_score × (weight / 100)
+
+// Final per juri:
+judge_score = Σ criteria_contribution
+
+// Final tim (multi-juri):
+// Jika dua juri menilai criteria sama → rata-rata contribution
+final_score = weighted_average(all judge contributions)
+```
+
+**Tidak ada kalkulasi ini di React.** Frontend hanya menampilkan angka dari server.
+
+---
+
+## 8. File Storage
+
+### Struktur
+```
+private-bucket/
   submissions/
     {teamId}/
-      bmc/
-        {uuid}.pdf
-      pitching/
-        {uuid}.pdf
+      bmc/    {uuid}.pdf
+      pitching/ {uuid}.pdf|pptx
 ```
 
-### 10.2 Upload Flow
-```text
-Client
- ↓
-Request upload permission
- ↓
-Server validates role + stage + team state
- ↓
-Signed upload URL
- ↓
-Object Storage
- ↓
-Client confirms upload
- ↓
-Server writes submission metadata
+### Upload Flow
+```
+Peserta pilih file → POST /api/submissions →
+Server validasi (role, stage, size, MIME) →
+Upload ke storage →
+Simpan metadata ke DB →
+Response sukses ke client
 ```
 
-### 10.3 Judge File Preview
-```text
-Judge
- ↓
-GET /api/submissions/:id/view
- ↓
-Server validates assignment
- ↓
-Generate short-lived signed URL
- ↓
-PDF Viewer loads URL
+### Judge Preview Flow
 ```
-Jangan membuat PDF public permanent.
-
-### 10.4 Delete Team
-Delete harus:
-1. Delete database relations using cascade where safe.
-2. Delete associated storage objects.
-3. Commit/handle failures safely.
-4. Return a clear result to Admin.
-
----
-
-## 11. Business Rules
-
-### Team
-- Nama tim wajib unik.
-- PIN dibuat server.
-- PIN minimal 6 digit/alphanumeric sesuai keputusan final.
-- PIN tidak boleh disimpan plaintext.
-
-### BMC Submission
-- Hanya dapat upload jika `bmc_submission_open = true`.
-- Hanya satu submission aktif per tim.
-- Sub-theme harus aktif.
-- File harus memenuhi validasi format/size (server-side).
-- Setelah submitted, peserta tidak dapat mengganti file kecuali kebijakan revisi memang diaktifkan kemudian.
-
-### BMC Evaluation
-- Hanya assignment terkait yang dapat menilai.
-- Score 0–100.
-- Semua required point harus memiliki score sebelum evaluation berstatus COMPLETED.
-- Hasil BMC tidak dapat ditentukan jika seluruh assignment belum COMPLETED.
-- Setelah PASSED/FAILED, evaluation BMC dikunci.
-
-### Pitching
-- Hanya tim PASSED BMC.
-- Submission stage harus open.
-- Evaluation mengikuti template Pitching aktif.
-- Semua assignment harus selesai sebelum final score dianggap complete.
-
-### Champion
-- Rank hanya 1, 2, 3.
-- Satu rank hanya boleh dimiliki satu tim.
-- Admin tidak dapat menetapkan rank pada tim yang tidak memenuhi syarat final.
-
----
-
-## 12. State Machines
-
-### Participant BMC
-```text
-NOT_ACCESS
-  ↓
-ACCESS_GRANTED
-  ↓
-BMC_READY
-  ↓
-BMC_SUBMITTED
-  ↓
-BMC_WAITING_RESULT
-  ├── PASSED → PITCHING_READY
-  └── FAILED → COMPLETED
-```
-
-### Pitching
-```text
-PITCHING_READY
-  ↓
-PITCHING_SUBMITTED
-  ↓
-PITCHING_WAITING_RESULT
-  ↓
-FINAL_RESULT
-```
-
-### Judge evaluation
-```text
-PENDING
-  ↓
-IN_PROGRESS (client state only; optional persistence)
-  ↓
-COMPLETED
-  ↓
-LOCKED
+Judge buka workspace → GET /api/submissions/:id/view →
+Server cek assignment milik judge →
+Generate signed URL (TTL 15 menit) →
+Frontend load PDF di iframe/viewer
 ```
 
 ---
 
-## 13. Dashboard Metrics (Server Aggregation)
+## 9. Validasi Server
 
-Admin dashboard minimal:
-- Total Tim.
-- Total BMC submitted.
-- Total Pitching submitted.
-- Total BMC passed.
-- Total evaluation pending.
-- Total final teams.
-
-Jangan menjalankan query berat untuk setiap stat jika count dapat digabung menjadi query agregasi.
-
----
-
-## 14. Performance Requirements (Backend Scope)
-
-- Dashboard menggunakan aggregate query (bukan N+1).
-- File tidak melewati database (langsung ke object storage).
-- Preview PDF langsung dari object storage melalui signed URL.
-
-### Database Index Minimum
-```text
-users.username
-teams.name
-submissions.team_id
-submissions.stage
-assignments.judge_id
-assignments.team_id
-assignments.stage
-evaluations.assignment_id
-evaluations.submission_id
-evaluation_scores.evaluation_id
-team_stage_results.team_id
-team_stage_results.stage
-final_results.rank
-```
+| Field | Rule |
+|---|---|
+| `team.name` | required, unique |
+| `judge.username` | required, unique |
+| `judge.password` | required saat create |
+| `criteria.weight` | 0–100; total template = 100 sebelum activate |
+| `score` | 0–100 per point |
+| Upload file | MIME + extension + size (server-side, bukan hanya client) |
+| Assignment PIN | bcrypt.compare, tidak pernah kirim hash ke client |
 
 ---
 
-## 15. Security Requirements
-
-- Password Juri/Admin di-hash menggunakan Argon2 atau bcrypt.
-- PIN peserta di-hash.
-- Session menggunakan secure HTTP-only cookie.
-- Role authorization dilakukan di server.
-- Ownership/assignment check dilakukan di server.
-- Tidak pernah mempercayai `teamId`, `judgeId`, atau `assignmentId` dari client tanpa validasi.
-- File bucket private.
-- Signed URL memiliki TTL pendek.
-- Validasi file server-side (MIME + extension, bukan hanya client).
-- Sanitize text yang ditampilkan bila ada rich text.
-- Rate limit endpoint participant access dan login.
-- CSRF protection mengikuti framework/session mechanism.
-- Jangan mengirim password hash, PIN hash, internal storage path sensitif, atau data juri yang tidak diperlukan ke client.
-
----
-
-## 16. Error Handling
-
-API menggunakan format konsisten:
+## 10. Error Response Format
 
 ```json
 {
   "success": false,
-  "error": {
-    "code": "EVALUATION_LOCKED",
-    "message": "Penilaian sudah dikunci dan tidak dapat diubah."
-  }
+  "error": "EVALUATION_LOCKED"
 }
 ```
 
-Success:
 ```json
 {
   "success": true,
-  "data": {},
-  "message": "Penilaian berhasil disimpan."
+  "data": { ... },
+  "message": "Berhasil disimpan."
 }
 ```
 
-Error code minimal:
-```text
-UNAUTHORIZED
-FORBIDDEN
-NOT_FOUND
-VALIDATION_ERROR
-STAGE_CLOSED
-INVALID_PIN
-DUPLICATE_SUBMISSION
-EVALUATION_LOCKED
-INCOMPLETE_EVALUATION
-INVALID_FILE
-STORAGE_ERROR
-CONFLICT
+Kode error standar:
+```
+UNAUTHORIZED       FORBIDDEN          NOT_FOUND
+VALIDATION_ERROR   STAGE_CLOSED       INVALID_PIN
+DUPLICATE_SUBMISSION  EVALUATION_LOCKED  INCOMPLETE_EVALUATION
+INVALID_FILE       STORAGE_ERROR      CONFLICT
 ```
 
 ---
 
-## 17. Server-Side Validation Contract
+## 11. Middleware & Route Protection
 
-Validasi berikut wajib ditegakkan ulang di server (tidak boleh hanya mengandalkan client):
-
-### Team
-```text
-name: required, unique
+File `middleware.ts`:
 ```
-
-### Judge
-```text
-name: required
-username: required, unique
-password: required on create
-```
-
-### Criteria
-```text
-name: required
-weight: 0–100
-```
-
-### Score
-```text
-score: 0–100
-```
-
-### Upload
-```text
-mime type
-extension
-size
-stage permission
+/admin/*    → session required, role = ADMIN
+/juri/*     → session required, role = JUDGE | ADMIN
+/login      → jika sudah login, redirect ke dashboard sesuai role
+/portal/*   → cek cookie yec_participant_session
 ```
 
 ---
 
-## 18. Evaluation Calculation Contract
+## 12. Environment Variables
 
-Untuk satu criteria:
-```text
-criteria_average = average(all score values)
-criteria_contribution = criteria_average × (weight / 100)
-```
-
-Final:
-```text
-final_score = Σ criteria_contribution
-```
-
-Untuk multi-judge BMC:
-1. Hitung nilai masing-masing assignment.
-2. Gabungkan contribution yang memang telah diselesaikan.
-3. Terapkan metode agregasi yang ditetapkan sistem.
-
-Rekomendasi V1:
-- Setiap juri menghasilkan sub-score berdasarkan kriteria yang menjadi assignment.
-- Final score dijumlahkan dari contribution seluruh criteria.
-- Jika dua juri menilai criteria yang sama, sistem menggunakan rata-rata score untuk criteria tersebut.
-
-Metode ini harus diimplementasikan dalam satu module server, misalnya:
-```text
-lib/scoring/calculateEvaluation.ts
-lib/scoring/calculateStageResult.ts
-```
-
-**Tidak boleh ada duplicate calculation logic di React/frontend.**
-
----
-
-## 19. Recommended Server Structure
-
-```text
-src/
-  app/
-    api/
-      auth/
-      participant/
-      settings/
-      teams/
-      judges/
-      assignments/
-      submissions/
-      evaluations/
-      evaluation-templates/
-      results/
-      dashboard/
-
-  actions/
-    admin/
-    judge/
-    participant/
-
-  lib/
-    auth/
-    db/
-    storage/
-    scoring/
-    validation/
-    authorization/
-```
-
-Route Handler digunakan untuk resource API. Server Actions digunakan untuk mutation internal yang cocok.
-
----
-
-## 20. Backend Testing Strategy
-
-### Functional
-- Participant access dengan PIN valid/invalid.
-- BMC upload ketika open/closed.
-- Pitching hanya untuk PASS.
-- Judge hanya melihat assignment sendiri.
-- Score validation 0–100.
-- Evaluation lock.
-- Result lock.
-- Champion uniqueness.
-- Cascade delete.
-
-### Authorization
-Test matrix:
-```text
-Admin → all admin actions
-Judge → only assigned actions
-Participant → only own team actions
-```
-
-### File
-- PDF valid.
-- PPTX valid.
-- File terlalu besar.
-- MIME spoof.
-- Unauthorized file access.
-
-### Scoring
-Siapkan test case untuk:
-- satu criteria.
-- beberapa point.
-- multi criteria.
-- multi judge.
-- incomplete evaluation.
-- duplicate criteria assignment.
-- rounding.
-
----
-
-## 21. Deployment Architecture
-
-Recommended:
-```text
-Vercel
-  │
-  └── Next.js Application
-       │
-       ├── Server Actions
-       ├── Route Handlers
-       └── Prisma
-            │
-            ▼
-       PostgreSQL
-
-Supabase Storage / R2
-       │
-       ├── BMC files
-       └── Pitching files
-```
-
-Environment variables minimal:
-```text
-DATABASE_URL
-AUTH_SECRET
-STORAGE_ENDPOINT / provider-specific vars
+```env
+NEXT_PUBLIC_SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+STORAGE_ENDPOINT
 STORAGE_BUCKET
 STORAGE_ACCESS_KEY
 STORAGE_SECRET_KEY
@@ -924,105 +509,27 @@ STORAGE_SECRET_KEY
 
 ---
 
-## 22. Backend Development Milestones
+## 13. Development Phases
 
-### Phase 1 — Foundation
-- Next.js setup.
-- TypeScript.
-- Prisma.
-- PostgreSQL.
-- Auth.js.
-
-### Phase 2 — Admin Core (API)
-- Settings API.
-- Subthemes API.
-- Teams API + PIN generation/export.
-- Judges API.
-- Assignments API.
-
-### Phase 3 — Participant API
-- Team access (PIN validation).
-- BMC submission API.
-- Submission status API.
-- BMC result API.
-- Pitching submission API.
-- Final result API.
-
-### Phase 4 — Dynamic Evaluation Engine
-- Templates API.
-- Criteria API.
-- Points API.
-- Weights validation.
-- Assignment criteria API.
-- Scoring engine (`lib/scoring`).
-
-### Phase 5 — Judge Workspace (API)
-- Dashboard/assignment API.
-- Submission signed URL API.
-- Evaluation save/edit API.
-- Lock handling logic.
-
-### Phase 6 — Result Management (API)
-- BMC pass/fail logic.
-- Pitching summary API.
-- Ranking calculation.
-- Champion selection API.
-
-### Phase 7 — Polish
-- Security hardening.
-- Error handling consistency.
-- Backend testing.
+| Phase | Scope |
+|---|---|
+| **1 — Foundation** | Supabase SQL Schema, migrations, Supabase Auth setup, middleware |
+| **2 — Admin Core** | Settings, Subthemes, Teams (+ PIN gen), Judges, Assignments |
+| **3 — Templates** | Evaluation templates, Criteria, Points, activate validation |
+| **4 — Participant** | Access/PIN, Portal state, BMC + Pitching submission |
+| **5 — Evaluations** | Juri dashboard, workspace data, save/submit scores, locking |
+| **6 — Results** | BMC pass/fail + lock, scoring engine, Pitching result + champion |
+| **7 — Polish** | Security hardening, error handling, index, signed URL, testing |
 
 ---
 
-## 23. Backend Definition of Done
+## 14. Definition of Done
 
 Feature dinyatakan selesai jika:
-- Role authorization bekerja di server.
-- Validation bekerja di server (tidak hanya bergantung pada client).
-- Semua state transition mengikuti business rules.
-- Tidak ada score calculation di luar module `lib/scoring` sebagai source of truth.
-- File private dan hanya dapat diakses sesuai authorization.
-- Tidak ada API khusus yang dibuat hanya karena ada halaman baru jika resource sudah tersedia.
-- Test utama (functional, authorization, file, scoring) lulus.
-
----
-
-## 24. Final Backend Architecture Decision
-
-```text
-Next.js Route Handlers
-Next.js Server Actions
-Auth.js
-Prisma
-PostgreSQL
-```
-
-### Storage
-```text
-Supabase Storage / Cloudflare R2 / S3-compatible
-```
-
-### Architectural Style
-```text
-Modular Monolith
-```
-Bukan microservices.
-
-### Core Rule
-```text
-One app
-One backend
-One relational database
-One private object storage
-Resource-based API
-Server-authoritative business logic
-```
-
----
-
-## 25. Frontend–Backend Contract Notes
-
-- Backend adalah satu-satunya source of truth untuk: authorization, validasi final, state transition, dan perhitungan nilai.
-- Semua response API harus membatasi field sesuai role (lihat API Authorization Matrix) — jangan mengandalkan frontend untuk menyembunyikan data sensitif.
-- Perubahan skema evaluasi (kriteria/point/bobot) cukup dilakukan lewat data (melalui Admin API), tanpa mengubah kontrak API yang dikonsumsi frontend.
+- [ ] Role authorization bekerja di **server** (tidak hanya di UI)
+- [ ] Validasi business rule ditegakkan di server
+- [ ] State transition mengikuti lifecycle di section 6
+- [ ] Kalkulasi nilai hanya ada di `lib/scoring/`
+- [ ] File private, akses melalui signed URL dengan TTL
+- [ ] Tidak ada endpoint baru yang dibuat hanya karena ada halaman baru
+- [ ] Response tidak mengandung data sensitif (pin_hash, password_hash, path storage internal)
