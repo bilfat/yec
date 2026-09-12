@@ -7,10 +7,10 @@ export function InitialLoader() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Simulate initial loading time
+    // Initial loading splash screen duration
     const timer = setTimeout(() => {
       setIsLoading(false)
-    }, 3500)
+    }, 800)
 
     return () => clearTimeout(timer)
   }, [])
