@@ -101,37 +101,39 @@ export default function AdminBmcEvaluationsPage() {
         </p>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="p-5 flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-yec-amber/10 text-yec-amber font-bold">
-            <FileCheck className="h-6 w-6" />
+      {/* Summary Cards (Compact & Responsive) */}
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
+        <Card className="p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 sm:gap-3.5">
+          <div className="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-yec-amber/10 text-yec-amber font-bold">
+            <FileCheck className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
-          <div>
-            <span className="text-xs font-bold text-yec-text-muted uppercase">Total Terkumpul</span>
-            <div className="font-display text-2xl font-bold text-yec-brown">
+          <div className="min-w-0">
+            <span className="text-[10px] sm:text-xs font-bold text-yec-text-muted uppercase tracking-wider block truncate">Total Terkumpul</span>
+            <div className="font-display text-base sm:text-xl font-bold text-yec-brown leading-tight">
               {evalList.filter(t => t.pdfName && t.pdfName !== 'Belum Unggah').length} Karya
             </div>
           </div>
         </Card>
-        <Card className="p-5 flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-success/10 text-success font-bold">
-            <CheckCircle2 className="h-6 w-6" />
+
+        <Card className="p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 sm:gap-3.5">
+          <div className="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success font-bold">
+            <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
-          <div>
-            <span className="text-xs font-bold text-yec-text-muted uppercase">Evaluasi Selesai</span>
-            <div className="font-display text-2xl font-bold text-yec-brown">
+          <div className="min-w-0">
+            <span className="text-[10px] sm:text-xs font-bold text-yec-text-muted uppercase tracking-wider block truncate">Evaluasi Selesai</span>
+            <div className="font-display text-base sm:text-xl font-bold text-yec-brown leading-tight">
               {evalList.filter(t => t.status === 'COMPLETED').length} Tim
             </div>
           </div>
         </Card>
-        <Card className="p-5 flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-warning/10 text-warning font-bold">
-            <Clock className="h-6 w-6" />
+
+        <Card className="p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 sm:gap-3.5">
+          <div className="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-warning/10 text-warning font-bold">
+            <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
-          <div>
-            <span className="text-xs font-bold text-yec-text-muted uppercase">Menunggu Juri</span>
-            <div className="font-display text-2xl font-bold text-yec-brown">
+          <div className="min-w-0">
+            <span className="text-[10px] sm:text-xs font-bold text-yec-text-muted uppercase tracking-wider block truncate">Menunggu Juri</span>
+            <div className="font-display text-base sm:text-xl font-bold text-yec-brown leading-tight">
               {evalList.filter(t => t.status === 'PENDING').length} Tim
             </div>
           </div>

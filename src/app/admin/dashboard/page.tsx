@@ -108,8 +108,8 @@ export default function AdminDashboardPage() {
         </div>
       </motion.div>
 
-      {/* Metrics Grid */}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Metrics Grid (2x2 on mobile, 4 columns on desktop) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
         {STATS.map((s, index) => (
           <motion.div
             key={s.title}
@@ -117,16 +117,16 @@ export default function AdminDashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
           >
-            <Card className="p-6 h-full flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-bold uppercase tracking-wider text-yec-text-muted">{s.title}</span>
-                <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${s.bg}`}>
-                  {s.icon}
+            <Card className="p-3.5 sm:p-5 h-full flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2.5 sm:mb-4">
+                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-yec-text-muted line-clamp-1">{s.title}</span>
+                <div className={`flex h-7 w-7 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg sm:rounded-xl ${s.bg}`}>
+                  {React.cloneElement(s.icon as React.ReactElement<any>, { className: "h-3.5 w-3.5 sm:h-5 sm:w-5" })}
                 </div>
               </div>
               <div>
-                <div className="font-display font-bold text-3xl text-yec-brown mb-1">{s.value}</div>
-                <p className="text-xs text-yec-text-secondary">{s.desc}</p>
+                <div className="font-display font-bold text-2xl sm:text-3xl text-yec-brown mb-0.5 sm:mb-1">{s.value}</div>
+                <p className="text-[10px] sm:text-xs text-yec-text-secondary line-clamp-1">{s.desc}</p>
               </div>
             </Card>
           </motion.div>

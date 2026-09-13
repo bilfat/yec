@@ -283,27 +283,29 @@ export default function AdminJudgesPage() {
         </div>
       </div>
 
-      {/* Section 2: Stage Tabs Navigation */}
-      <div className="flex border-b border-[#DDD3C7]">
+      {/* Section 2: Modern Stage Segmented Tabs */}
+      <div className="p-1.5 rounded-2xl bg-yec-paper border border-[#DDD3C7] flex w-full sm:w-auto sm:inline-flex gap-1 shadow-inner">
         <button
           onClick={() => setActiveTab("BMC")}
-          className={`flex items-center gap-2 px-6 py-3 font-display text-base font-bold transition-all border-b-2 ${
+          className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 rounded-xl font-display text-xs sm:text-sm font-bold transition-all ${
             activeTab === "BMC"
-              ? "border-yec-amber text-yec-amber bg-yec-amber/5"
-              : "border-transparent text-yec-text-secondary hover:text-yec-brown"
+              ? "bg-yec-white text-yec-brown shadow-sm border border-[#DDD3C7]/80"
+              : "text-yec-text-secondary hover:text-yec-brown hover:bg-yec-white/50"
           }`}
         >
-          <FileCheck className="h-5 w-5" /> Tahap 1 — Business Model Canvas (BMC)
+          <FileCheck className="h-4 w-4 text-yec-amber shrink-0" />
+          <span>Tahap 1 <span className="hidden sm:inline">— Business Model Canvas (BMC)</span><span className="sm:hidden">BMC</span></span>
         </button>
         <button
           onClick={() => setActiveTab("PITCHING")}
-          className={`flex items-center gap-2 px-6 py-3 font-display text-base font-bold transition-all border-b-2 ${
+          className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 rounded-xl font-display text-xs sm:text-sm font-bold transition-all ${
             activeTab === "PITCHING"
-              ? "border-yec-amber text-yec-amber bg-yec-amber/5"
-              : "border-transparent text-yec-text-secondary hover:text-yec-brown"
+              ? "bg-yec-white text-yec-brown shadow-sm border border-[#DDD3C7]/80"
+              : "text-yec-text-secondary hover:text-yec-brown hover:bg-yec-white/50"
           }`}
         >
-          <Award className="h-5 w-5" /> Tahap 2 — Presentasi Pitching (Seluruh Juri)
+          <Award className="h-4 w-4 text-yec-amber shrink-0" />
+          <span>Tahap 2 <span className="hidden sm:inline">— Presentasi Pitching (Seluruh Juri)</span><span className="sm:hidden">Pitching</span></span>
         </button>
       </div>
 
