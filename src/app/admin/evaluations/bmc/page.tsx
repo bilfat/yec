@@ -109,7 +109,9 @@ export default function AdminBmcEvaluationsPage() {
           </div>
           <div>
             <span className="text-xs font-bold text-yec-text-muted uppercase">Total Terkumpul</span>
-            <div className="font-display text-2xl font-bold text-yec-brown">4 Karya</div>
+            <div className="font-display text-2xl font-bold text-yec-brown">
+              {evalList.filter(t => t.pdfName && t.pdfName !== 'Belum Unggah').length} Karya
+            </div>
           </div>
         </Card>
         <Card className="p-5 flex items-center gap-4">
@@ -118,7 +120,9 @@ export default function AdminBmcEvaluationsPage() {
           </div>
           <div>
             <span className="text-xs font-bold text-yec-text-muted uppercase">Evaluasi Selesai</span>
-            <div className="font-display text-2xl font-bold text-yec-brown">3 Tim</div>
+            <div className="font-display text-2xl font-bold text-yec-brown">
+              {evalList.filter(t => t.status === 'COMPLETED').length} Tim
+            </div>
           </div>
         </Card>
         <Card className="p-5 flex items-center gap-4">
@@ -127,7 +131,9 @@ export default function AdminBmcEvaluationsPage() {
           </div>
           <div>
             <span className="text-xs font-bold text-yec-text-muted uppercase">Menunggu Juri</span>
-            <div className="font-display text-2xl font-bold text-yec-brown">1 Tim</div>
+            <div className="font-display text-2xl font-bold text-yec-brown">
+              {evalList.filter(t => t.status === 'PENDING').length} Tim
+            </div>
           </div>
         </Card>
       </div>

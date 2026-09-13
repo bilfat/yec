@@ -1,61 +1,36 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { checkAdminAccess, getUserRole } from '@/lib/auth-helpers'
+import { getActiveOrFallbackTemplate } from '@/lib/evaluation-helpers'
 
 export async function GET(request: Request) {
   try {
     const role = await getUserRole()
     if (role !== 'ADMIN' && role !== 'JUDGE') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
     const stage = searchParams.get('stage')
 
     if (!stage) {
-      return NextResponse.json({ error: 'Stage parameter is required' }, { status: 400 })
+      return NextResponse.json({ success: false, error: { code: 'BAD_REQUEST', message: 'Stage parameter is required' } }, { status: 400 })
     }
 
     const supabase = createAdminClient()
 
-    // Find the ACTIVE template first. If not found, find the latest DRAFT.
-    let { data: templates, error } = await supabase
-      .from('evaluation_templates')
-      .select(`
-        id,
-        name,
-        active,
-        criteria (
-          id,
-          name,
-          weight,
-          sort_order,
-          criterion_points (
-            id,
-            name,
-            sort_order
-          )
-        )
-      `)
-      .eq('stage', stage)
-      .order('active', { ascending: false }) // true comes before false
-      .order('created_at', { ascending: false })
-      .limit(1)
+    const template = await getActiveOrFallbackTemplate(supabase, stage)
 
-    if (error) throw error
-
-    if (!templates || templates.length === 0) {
-      return NextResponse.json({ data: null })
+    if (!template) {
+      return NextResponse.json({ success: true, data: null, message: 'Template tidak ditemukan' })
     }
-
-    const template = templates[0]
 
     // Map to frontend format
     // Sort criteria by sort_order
-    const sortedCriteria = template.criteria?.sort((a: any, b: any) => a.sort_order - b.sort_order) || []
+    const sortedCriteria = (template.criteria || []).sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
     
     const criteriaList = sortedCriteria.map((c: any) => {
-      const sortedPoints = c.criterion_points?.sort((a: any, b: any) => a.sort_order - b.sort_order) || []
+      const sortedPoints = (c.criterion_points || []).sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
       return {
         id: c.id,
         name: c.name,
@@ -68,14 +43,17 @@ export async function GET(request: Request) {
     })
 
     return NextResponse.json({
+      success: true,
       data: {
         templateName: template.name,
         status: template.active ? "ACTIVE" : "DRAFT",
         criteriaList
-      }
+      },
+      message: 'Berhasil mengambil template evaluasi'
     })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    const errMessage = error instanceof Error ? error.message : 'Terjadi kesalahan server'
+    return NextResponse.json({ success: false, error: { code: 'SERVER_ERROR', message: errMessage } }, { status: 500 })
   }
 }
 
@@ -92,12 +70,9 @@ export async function POST(request: Request) {
     if (isActive) {
       const totalWeight = criteriaList.reduce((sum: number, c: any) => sum + (Number(c.weight) || 0), 0)
       if (totalWeight !== 100) {
-        return NextResponse.json({ error: 'Total weight must be exactly 100% to activate.' }, { status: 400 })
+        return NextResponse.json({ success: false, error: { code: 'BAD_REQUEST', message: 'Total bobot kriteria harus tepat 100% untuk mengaktifkan template.' } }, { status: 400 })
       }
     }
-
-    // Since Supabase JS doesn't easily support cross-table transactions, we'll do sequential inserts
-    // If it fails halfway, we might have garbage, but since we create a new template UUID, it won't corrupt active ones.
 
     // 1. Insert new template
     const { data: newTemplate, error: tError } = await supabase
@@ -127,7 +102,6 @@ export async function POST(request: Request) {
         .single()
 
       if (cError) {
-        // Rollback template manually
         await supabase.from('evaluation_templates').delete().eq('id', newTemplate.id)
         throw cError
       }
@@ -147,16 +121,14 @@ export async function POST(request: Request) {
       }
     }
 
-    // 3. Deactivate old templates (or delete old draft if we just saved a draft)
+    // 3. Deactivate old templates
     if (isActive) {
-      // Deactivate all other templates for this stage
       await supabase
         .from('evaluation_templates')
         .update({ active: false })
         .eq('stage', stage)
         .neq('id', newTemplate.id)
     } else {
-      // We saved a draft. Delete all OTHER drafts for this stage so we don't pile up drafts
       await supabase
         .from('evaluation_templates')
         .delete()
@@ -165,9 +137,12 @@ export async function POST(request: Request) {
         .neq('id', newTemplate.id)
     }
 
-    return NextResponse.json({ success: true, data: { id: newTemplate.id } }, { status: 201 })
-  } catch (error: any) {
-    if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true, data: { id: newTemplate.id }, message: 'Template penilaian berhasil disimpan' }, { status: 201 })
+  } catch (error: unknown) {
+    const errMessage = error instanceof Error ? error.message : 'Terjadi kesalahan server'
+    if (errMessage === 'Unauthorized') {
+      return NextResponse.json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } }, { status: 401 })
+    }
+    return NextResponse.json({ success: false, error: { code: 'SERVER_ERROR', message: errMessage } }, { status: 500 })
   }
 }

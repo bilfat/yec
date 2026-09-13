@@ -21,6 +21,7 @@ type PortalState = "READY" | "SUBMITTED" | "WAITING_RESULT" | "PASSED" | "FAILED
 interface SubthemeOption {
   id: string
   name: string
+  description?: string
 }
 
 interface PortalData {
@@ -232,6 +233,18 @@ function BmcSection({
               disabled={!isOpen}
             />
           </FormField>
+
+          {subthemeId && (
+            <div className="p-3.5 rounded-xl bg-yec-amber/10 border border-yec-amber/20 text-xs text-yec-brown flex items-start gap-2.5">
+              <span className="text-base mt-0.5">💡</span>
+              <div>
+                <span className="font-bold block text-yec-brown mb-0.5">Penjelasan Sub-tema:</span>
+                <p className="text-yec-text-secondary leading-relaxed">
+                  {portalData.activeSubthemes.find((s) => s.id === subthemeId)?.description || "Inovasi sub-tema bisnis pemuda Young Entrepreneur Camp 2026."}
+                </p>
+              </div>
+            </div>
+          )}
 
           <FileDropzone onFileSelect={setFile} accept="application/pdf" maxSizeMB={10} />
 

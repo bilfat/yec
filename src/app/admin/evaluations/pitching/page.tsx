@@ -223,7 +223,7 @@ export default function AdminPitchingEvaluationsPage() {
                   </span>
                 </TableCell>
                 <TableCell className="font-display font-bold text-xl text-yec-brown">
-                  {t.averageScore.toFixed(1)}
+                  {t.averageScore !== null && t.averageScore !== undefined ? t.averageScore.toFixed(1) : "-"}
                 </TableCell>
                 <TableCell className="text-right">
                   <Button

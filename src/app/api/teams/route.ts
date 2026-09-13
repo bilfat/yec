@@ -17,7 +17,10 @@ export async function GET() {
           pin_hash,
           active,
           created_at,
-          subthemes ( id, name )
+          subthemes ( id, name ),
+          submissions ( id, stage, storage_path, original_filename ),
+          team_stage_results ( id, stage, result_status, final_score ),
+          final_results ( id, rank, final_score )
         `)
         .order('created_at', { ascending: false })
 
@@ -33,9 +36,35 @@ export async function GET() {
             const newPinHash = await hashPin(rawPin)
             await supabase.from('teams').update({ pin_hash: newPinHash }).eq('id', t.id)
           }
+
+          // Process statuses
+          const bmcSubmission = t.submissions?.find((s: any) => s.stage === 'BMC')
+          const pitchingSubmission = t.submissions?.find((s: any) => s.stage === 'PITCHING')
+          const bmcResult = t.team_stage_results?.find((r: any) => r.stage === 'BMC')
+          const pitchingResult = t.team_stage_results?.find((r: any) => r.stage === 'PITCHING')
+          const finalResult = t.final_results?.[0] || null
+
+          let bmcStatus = "Belum dikumpul"
+          if (bmcResult?.result_status === 'PASSED') bmcStatus = "Lolos"
+          else if (bmcResult?.result_status === 'FAILED') bmcStatus = "Tidak Lolos"
+          else if (bmcSubmission) bmcStatus = "Dikumpul"
+
+          let pitchingStatus = "Belum dikumpul"
+          if (finalResult?.rank === 1) pitchingStatus = "Juara 1"
+          else if (finalResult?.rank === 2) pitchingStatus = "Juara 2"
+          else if (finalResult?.rank === 3) pitchingStatus = "Juara 3"
+          else if (pitchingResult?.result_status === 'PASSED' || pitchingResult?.result_status === 'FAILED') pitchingStatus = "Tidak Juara"
+          else if (pitchingSubmission) pitchingStatus = "Dikumpul"
+
           mappedData.push({
             ...t,
-            pin_code: rawPin
+            pin_code: rawPin,
+            bmcStatus,
+            pitchingStatus,
+            bmcScore: bmcResult?.final_score || null,
+            pitchingScore: finalResult?.final_score || pitchingResult?.final_score || null,
+            bmcFile: bmcSubmission ? { id: bmcSubmission.id, name: bmcSubmission.original_filename } : null,
+            pitchingFile: pitchingSubmission ? { id: pitchingSubmission.id, name: pitchingSubmission.original_filename } : null
           })
         }
       }

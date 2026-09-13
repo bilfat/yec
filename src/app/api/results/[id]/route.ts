@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { checkAdminAccess } from '@/lib/auth-helpers'
 import { calculateJudgeTotalScore, calculateFinalAggregatedScore } from '@/lib/scoring'
+import { getActiveOrFallbackTemplate } from '@/lib/evaluation-helpers'
 
 export async function PUT(
   request: NextRequest,
@@ -21,24 +22,10 @@ export async function PUT(
 
     const supabase = createAdminClient()
 
-    // 1. Fetch active template for this stage to calculate final score
-    const { data: template } = await supabase
-      .from('evaluation_templates')
-      .select(`
-        id,
-        criteria (
-          id,
-          name,
-          weight,
-          sort_order,
-          criterion_points ( id, name, sort_order )
-        )
-      `)
-      .eq('stage', stage)
-      .eq('active', true)
-      .maybeSingle()
+    // 1. Fetch active or fallback template for this stage to calculate final score
+    const template = await getActiveOrFallbackTemplate(supabase, stage)
 
-    const criteriaList = (template?.criteria || []).map((c: any) => ({
+    const criteriaList = ((template?.criteria as any[]) || []).map((c: any) => ({
       id: c.id,
       name: c.name,
       weight: c.weight,
@@ -59,11 +46,15 @@ export async function PUT(
       .eq('team_id', teamId)
       .eq('stage', stage)
 
+    const totalAssignments = (assignments || []).length
+    let completedEvaluationsCount = 0
     const judgeScores: number[] = []
 
     for (const a of (assignments || [])) {
       const evalObj = (a as any).evaluations?.[0]
       if (evalObj && evalObj.status === 'COMPLETED') {
+        completedEvaluationsCount++
+
         const scoresMap: Record<string, number> = {}
         if (evalObj.evaluation_scores) {
           evalObj.evaluation_scores.forEach((es: any) => {
@@ -76,6 +67,12 @@ export async function PUT(
       }
     }
 
+    if (totalAssignments === 0 || completedEvaluationsCount < totalAssignments) {
+      return NextResponse.json({
+        success: false,
+        error: 'Tidak dapat menetapkan status. Seluruh juri penilai yang ditugaskan harus menyelesaikan penilaian terlebih dahulu.'
+      }, { status: 400 })
+    }
 
     const finalScore = calculateFinalAggregatedScore(judgeScores) || 0
     const nowIso = new Date().toISOString()

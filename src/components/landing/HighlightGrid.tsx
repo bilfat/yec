@@ -21,9 +21,27 @@ export function HighlightGrid() {
 
   React.useEffect(() => {
     async function loadData() {
-      const res = await fetchApi<Subtheme[]>('/subthemes')
+      const res = await fetchApi<any[]>('/subthemes')
       if (res.success && res.data) {
-        setHighlights(res.data)
+        const presets = [
+          { color: "bg-info/10 border-info/20", textColor: "text-info", iconName: "lightbulb", desc: "Solusi bisnis berbasis teknologi & inovasi digital." },
+          { color: "bg-yec-amber/10 border-yec-amber/20", textColor: "text-yec-brown", iconName: "users", desc: "Karya kreasi unik, desain, media & industri seni." },
+          { color: "bg-yec-brown/10 border-yec-brown/20", textColor: "text-yec-brown", iconName: "trending-up", desc: "Produk & layanan bisnis masa depan berkelanjutan." },
+          { color: "bg-success/10 border-success/20", textColor: "text-success", iconName: "lightbulb", desc: "Inovasi sosial & pemberdayaan masyarakat." }
+        ]
+        const mapped = res.data.map((st: any, idx: number) => {
+          const preset = presets[idx % presets.length]
+          return {
+            id: st.id,
+            displayId: `0${idx + 1}`,
+            title: st.name || st.title || `Sub-tema ${idx + 1}`,
+            description: st.description || preset.desc,
+            color: preset.color,
+            textColor: preset.textColor,
+            iconName: preset.iconName
+          }
+        })
+        setHighlights(mapped)
       }
       setIsLoading(false)
     }
@@ -110,8 +128,8 @@ export function HighlightGrid() {
               className={`${item.color} ${item.textColor} rounded-[32px] p-8 shadow-sm transition-transform hover:-translate-y-2 relative overflow-hidden`}
             >
               <div className="mb-8 flex items-center justify-between">
-                <span className="font-display text-4xl font-bold opacity-50">{item.id}</span>
-                <div className={`flex h-12 w-12 items-center justify-center rounded-full ${item.id === '01' ? 'bg-yec-amber/10' : 'bg-white/10'}`}>
+                <span className="font-display text-4xl font-bold opacity-50">{(item as any).displayId || item.id}</span>
+                <div className={`flex h-12 w-12 items-center justify-center rounded-full ${(item as any).displayId === '01' ? 'bg-yec-amber/10' : 'bg-white/10'}`}>
                   {renderIcon(item.iconName)}
                 </div>
               </div>

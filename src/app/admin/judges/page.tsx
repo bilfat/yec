@@ -59,10 +59,11 @@ export default function AdminJudgesPage() {
 
   const fetchData = async () => {
     setIsLoading(true)
-    const [resJudges, resTeams, resAssignments] = await Promise.all([
+    const [resJudges, resTeams, resAssignments, resBmcResults] = await Promise.all([
       fetchApi<any[]>('/judges'),
       fetchApi<any[]>('/teams'),
-      fetchApi<any[]>('/assignments')
+      fetchApi<any[]>('/assignments'),
+      fetchApi<any[]>('/results?stage=BMC')
     ])
     
     if (resJudges.success && resJudges.data) {
@@ -72,29 +73,34 @@ export default function AdminJudgesPage() {
     if (resTeams.success && resTeams.data && resAssignments.success && resAssignments.data) {
       const teams = resTeams.data
       const assignments = resAssignments.data
+      const bmcResults = resBmcResults.success && resBmcResults.data ? resBmcResults.data : []
+      const passedBmcIds = new Set(bmcResults.filter((r: any) => r.resultStatus === 'PASSED').map((r: any) => r.id))
 
       const mappedBmcTeams: TeamAssignment[] = teams.map((t) => {
-        // Find assignments for this team in BMC stage
-        const teamAssignments = assignments.filter((a) => a.team_id === t.id && a.stage === 'BMC')
+        const teamAssignments = assignments.filter((a: any) => a.team_id === t.id && a.stage === 'BMC')
+        const bmcResultObj = bmcResults.find((r: any) => r.id === t.id)
         
         return {
           id: t.id,
           teamName: t.name,
           subtheme: t.subthemes?.name || "-",
-          fileName: "Belum Ada (Menunggu Phase 3)",
-          assignments: teamAssignments.map((a) => ({ assignmentId: a.id, judgeId: a.judge_id }))
+          fileName: bmcResultObj?.pdfName || "Belum Unggah",
+          assignments: teamAssignments.map((a: any) => ({ assignmentId: a.id, judgeId: a.judge_id }))
         }
       })
       
-      const mappedPitchingTeams: TeamAssignment[] = teams.map((t) => {
-        return {
-          id: t.id,
-          teamName: t.name,
-          subtheme: t.subthemes?.name || "-",
-          fileName: "Belum Ada",
-          assignments: []
-        }
-      })
+      const mappedPitchingTeams: TeamAssignment[] = teams
+        .filter((t) => passedBmcIds.has(t.id))
+        .map((t) => {
+          const bmcResultObj = bmcResults.find((r: any) => r.id === t.id)
+          return {
+            id: t.id,
+            teamName: t.name,
+            subtheme: t.subthemes?.name || "-",
+            fileName: bmcResultObj?.pitchingFile || "Belum Unggah Pitching",
+            assignments: []
+          }
+        })
 
       setBmcTeams(mappedBmcTeams)
       setPitchingTeams(mappedPitchingTeams)

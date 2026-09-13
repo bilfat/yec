@@ -19,6 +19,7 @@ interface SubmissionCardProps {
   submittedFile?: { name: string, date: string }
   maxSizeMB?: number
   showSubtheme?: boolean
+  subthemeOptions?: Array<{ value: string; label: string }>
 }
 
 export function SubmissionCard({ 
@@ -29,9 +30,18 @@ export function SubmissionCard({
   deadline,
   submittedFile,
   maxSizeMB = 10,
-  showSubtheme = false
+  showSubtheme = false,
+  subthemeOptions
 }: SubmissionCardProps) {
   
+  const defaultSubthemes = [
+    { value: "", label: "Pilih Sub-tema Bisnis Anda..." },
+    { value: "tech", label: "Teknologi & Digital" },
+    { value: "creative", label: "Industri Kreatif" },
+    { value: "fnb", label: "Food & Beverage" },
+    { value: "green", label: "Green Business & Sustainability" }
+  ]
+
   const renderContent = () => {
     switch (state) {
       case "READY":
@@ -46,13 +56,7 @@ export function SubmissionCard({
                 <FormField label="Pilih Sub-tema" htmlFor="subtheme">
                   <Select 
                     id="subtheme" 
-                    options={[
-                      { value: "", label: "Pilih Sub-tema Bisnis Anda..." },
-                      { value: "tech", label: "Teknologi & Digital" },
-                      { value: "creative", label: "Industri Kreatif" },
-                      { value: "fnb", label: "Food & Beverage" },
-                      { value: "green", label: "Green Business & Sustainability" }
-                    ]}
+                    options={subthemeOptions || defaultSubthemes}
                   />
                 </FormField>
               </div>

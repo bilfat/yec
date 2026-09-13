@@ -54,16 +54,8 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Gagal membuat URL pratinjau file' }, { status: 500 })
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        signedUrl: signedData.signedUrl,
-        originalFilename: submission.original_filename,
-        mimeType: submission.mime_type,
-        fileSize: submission.file_size
-      },
-      message: 'Berhasil membuat Signed URL file'
-    })
+    // Redirect directly to the signed URL so the browser can download/view it
+    return NextResponse.redirect(signedData.signedUrl)
   } catch (error: any) {
     console.error('Submission view GET error:', error)
     return NextResponse.json({ success: false, error: 'Terjadi kesalahan internal' }, { status: 500 })

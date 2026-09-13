@@ -7,11 +7,13 @@ export const metadata: Metadata = {
 }
 
 interface PageProps {
-  params: {
+  params: Promise<{
     assignmentId: string
-  }
+  }>
 }
 
-export default function JuriEvaluationPage({ params }: PageProps) {
-  return <EvaluationWorkspace assignmentId={params.assignmentId} />
+export default async function JuriEvaluationPage({ params }: PageProps) {
+  const { assignmentId } = await params
+  return <EvaluationWorkspace assignmentId={assignmentId} />
 }
+

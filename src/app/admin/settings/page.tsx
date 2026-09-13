@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/Textarea"
 import { FormField } from "@/components/ui/FormField"
 import { Badge } from "@/components/ui/Badge"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
+import { Modal } from "@/components/ui/Modal"
 import { fetchApi } from "@/lib/api"
 import {
   Save, Plus, Trash2, GripVertical, CheckCircle2,
@@ -31,7 +32,9 @@ export default function AdminSettingsPage() {
   const [subthemes, setSubthemes] = useState<any[]>([])
   
   const [newSubthemeTitle, setNewSubthemeTitle] = useState("")
+  const [newSubthemeDescription, setNewSubthemeDescription] = useState("")
   const [newSubthemeCode, setNewSubthemeCode] = useState("")
+  const [editingSubtheme, setEditingSubtheme] = useState<any | null>(null)
   
   const [showSavedToast, setShowSavedToast] = useState(false)
   const [deleteSubthemeId, setDeleteSubthemeId] = useState<string | null>(null)
@@ -65,7 +68,8 @@ export default function AdminSettingsPage() {
         const mapped = subthemesRes.data.map((s: any) => ({
           id: s.id,
           title: s.name,
-          code: s.name.substring(0, 4).toUpperCase(), // If code is not in schema, fallback
+          description: s.description || "",
+          code: s.name.substring(0, 4).toUpperCase(),
           active: s.active,
           sortOrder: s.sort_order
         }))
@@ -113,6 +117,7 @@ export default function AdminSettingsPage() {
     
     const payload = {
       name: newSubthemeTitle,
+      description: newSubthemeDescription,
       sortOrder: subthemes.length + 1,
       active: true
     }
@@ -128,15 +133,42 @@ export default function AdminSettingsPage() {
         {
           id: res.data.id,
           title: res.data.name,
+          description: res.data.description || "",
           code: res.data.name.substring(0, 4).toUpperCase(),
           active: res.data.active,
           sortOrder: res.data.sort_order
         },
       ])
       setNewSubthemeTitle("")
+      setNewSubthemeDescription("")
       setNewSubthemeCode("")
     } else {
       alert(res.error?.message || 'Gagal menambahkan subtema')
+    }
+  }
+
+  const handleSaveEditSubtheme = async () => {
+    if (!editingSubtheme || !editingSubtheme.title.trim()) return
+
+    const res = await fetchApi(`/subthemes/${editingSubtheme.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: editingSubtheme.title,
+        description: editingSubtheme.description
+      })
+    })
+
+    if (res.success && res.data) {
+      setSubthemes(
+        subthemes.map((s) =>
+          s.id === editingSubtheme.id
+            ? { ...s, title: res.data.name, description: res.data.description || "" }
+            : s
+        )
+      )
+      setEditingSubtheme(null)
+    } else {
+      alert(res.error?.message || 'Gagal mengedit subtema')
     }
   }
 
@@ -320,17 +352,29 @@ export default function AdminSettingsPage() {
             {subthemes.map((st) => (
               <div
                 key={st.id}
-                className="flex items-center justify-between p-4 rounded-xl border border-[#DDD3C7] bg-yec-paper"
+                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-[#DDD3C7] bg-yec-paper gap-3"
               >
-                <div className="flex items-center gap-3">
-                  <GripVertical className="h-4 w-4 text-yec-text-muted cursor-grab" />
+                <div className="flex items-start gap-3">
+                  <GripVertical className="h-4 w-4 text-yec-text-muted cursor-grab mt-1 shrink-0" />
                   <div>
-                    <span className="font-semibold text-sm text-yec-brown">{st.title}</span>
-                    <span className="ml-2 text-xs font-mono text-yec-amber">[{st.code}]</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm text-yec-brown">{st.title}</span>
+                      <span className="text-xs font-mono text-yec-amber">[{st.code}]</span>
+                    </div>
+                    {st.description && (
+                      <p className="text-xs text-yec-text-secondary mt-1">{st.description}</p>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSubtheme({ ...st })}
+                    className="px-3 py-1 text-xs font-medium rounded-lg bg-yec-amber/10 text-yec-brown hover:bg-yec-amber/20 transition-colors"
+                  >
+                    Edit
+                  </button>
                   <button
                     type="button"
                     onClick={() => toggleSubtheme(st.id)}
@@ -355,35 +399,49 @@ export default function AdminSettingsPage() {
           </div>
 
           {/* Form Tambah Subtheme */}
-          <div className="pt-4 border-t border-[#DDD3C7] flex flex-col sm:flex-row gap-3 items-end">
-            <div className="flex-1 w-full">
-              <FormField label="Nama Sub-tema Baru" htmlFor="newSubTitle">
-                <Input
-                  id="newSubTitle"
-                  placeholder="Contoh: Social Entrepreneurship..."
-                  value={newSubthemeTitle}
-                  onChange={(e) => setNewSubthemeTitle(e.target.value)}
-                />
-              </FormField>
+          <div className="pt-4 border-t border-[#DDD3C7] space-y-4">
+            <div className="grid gap-4 sm:grid-cols-12">
+              <div className="sm:col-span-8">
+                <FormField label="Nama Sub-tema Baru" htmlFor="newSubTitle">
+                  <Input
+                    id="newSubTitle"
+                    placeholder="Contoh: Social Entrepreneurship..."
+                    value={newSubthemeTitle}
+                    onChange={(e) => setNewSubthemeTitle(e.target.value)}
+                  />
+                </FormField>
+              </div>
+              <div className="sm:col-span-4">
+                <FormField label="Kode (Opsional)" htmlFor="newSubCode">
+                  <Input
+                    id="newSubCode"
+                    placeholder="SOC"
+                    value={newSubthemeCode}
+                    onChange={(e) => setNewSubthemeCode(e.target.value)}
+                  />
+                </FormField>
+              </div>
+              <div className="sm:col-span-12">
+                <FormField label="Keterangan / Penjelasan Singkat Sub-tema" htmlFor="newSubDesc">
+                  <Input
+                    id="newSubDesc"
+                    placeholder="Contoh: Inovasi bisnis yang berfokus pada dampak sosial dan masyarakat..."
+                    value={newSubthemeDescription}
+                    onChange={(e) => setNewSubthemeDescription(e.target.value)}
+                  />
+                </FormField>
+              </div>
             </div>
-            <div className="w-full sm:w-36">
-              <FormField label="Kode (Opsional)" htmlFor="newSubCode">
-                <Input
-                  id="newSubCode"
-                  placeholder="SOC"
-                  value={newSubthemeCode}
-                  onChange={(e) => setNewSubthemeCode(e.target.value)}
-                />
-              </FormField>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleAddSubtheme}
+                className="gap-2 w-full sm:w-auto h-11"
+              >
+                <Plus className="h-4 w-4" /> Tambah Sub-tema
+              </Button>
             </div>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleAddSubtheme}
-              className="gap-2 w-full sm:w-auto h-11 shrink-0"
-            >
-              <Plus className="h-4 w-4" /> Tambah Sub-tema
-            </Button>
           </div>
         </Card>
 
@@ -445,6 +503,44 @@ export default function AdminSettingsPage() {
         onConfirm={handleDeleteSubtheme}
         onCancel={() => setDeleteSubthemeId(null)}
       />
+
+      {/* Modal Edit Subtheme */}
+      {editingSubtheme && (
+        <Modal
+          isOpen={editingSubtheme !== null}
+          onClose={() => setEditingSubtheme(null)}
+          title="Edit Sub-tema Bisnis"
+        >
+          <div className="space-y-4">
+            <FormField label="Nama Sub-tema" htmlFor="editSubTitle">
+              <Input
+                id="editSubTitle"
+                value={editingSubtheme.title}
+                onChange={(e) => setEditingSubtheme({ ...editingSubtheme, title: e.target.value })}
+              />
+            </FormField>
+
+            <FormField label="Keterangan / Penjelasan Singkat" htmlFor="editSubDesc">
+              <Textarea
+                id="editSubDesc"
+                rows={3}
+                placeholder="Penjelasan singkat sub-tema..."
+                value={editingSubtheme.description}
+                onChange={(e) => setEditingSubtheme({ ...editingSubtheme, description: e.target.value })}
+              />
+            </FormField>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-[#DDD3C7]">
+              <Button type="button" variant="ghost" onClick={() => setEditingSubtheme(null)}>
+                Batal
+              </Button>
+              <Button type="button" onClick={handleSaveEditSubtheme}>
+                Simpan Perubahan
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

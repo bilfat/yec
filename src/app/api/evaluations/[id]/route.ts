@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/auth-helpers'
+import { getActiveOrFallbackTemplate } from '@/lib/evaluation-helpers'
 
 const BUCKET_NAME = process.env.STORAGE_BUCKET || 'yec-private-submissions'
 
@@ -45,29 +46,8 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Anda tidak berhak mengakses penugasan tim ini' }, { status: 403 })
     }
 
-    // 2. Fetch active evaluation template for this stage
-    const { data: template } = await supabase
-      .from('evaluation_templates')
-      .select(`
-        id,
-        name,
-        stage,
-        description,
-        criteria (
-          id,
-          name,
-          weight,
-          sort_order,
-          criterion_points (
-            id,
-            name,
-            sort_order
-          )
-        )
-      `)
-      .eq('stage', assignment.stage)
-      .eq('active', true)
-      .single()
+    // 2. Fetch active or fallback evaluation template for this stage
+    const template = await getActiveOrFallbackTemplate(supabase, assignment.stage)
 
     // 3. Fetch submission for this team & stage
     const { data: submission } = await supabase
@@ -122,18 +102,21 @@ export async function GET(
 
       if (scopeCriteria && scopeCriteria.length > 0) {
         const assignedIds = new Set(scopeCriteria.map((sc: any) => sc.criterion_id))
-        rawCriteria = rawCriteria.filter((c: any) => assignedIds.has(c.id))
+        const filtered = rawCriteria.filter((c: any) => assignedIds.has(c.id))
+        if (filtered.length > 0) {
+          rawCriteria = filtered
+        }
       }
     }
 
     const criteriaList = rawCriteria
-      .sort((a: any, b: any) => a.sort_order - b.sort_order)
+      .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
       .map((c: any) => ({
         id: c.id,
         name: c.name,
         weight: c.weight,
         points: (c.criterion_points || [])
-          .sort((pa: any, pb: any) => pa.sort_order - pb.sort_order)
+          .sort((pa: any, pb: any) => (pa.sort_order || 0) - (pb.sort_order || 0))
           .map((p: any) => ({
             id: p.id,
             label: p.name
@@ -212,6 +195,17 @@ export async function PUT(
 
     if (user.role === 'JUDGE' && assignment.judge_id !== user.id) {
       return NextResponse.json({ success: false, error: 'Anda tidak berhak menilai tim ini' }, { status: 403 })
+    }
+
+    // Check stage evaluation setting for JUDGE
+    if (user.role === 'JUDGE') {
+      const { data: settings } = await supabase.from('competition_settings').select('*').limit(1).maybeSingle()
+      if (assignment.stage === 'BMC' && settings && settings.bmc_evaluation_open === false) {
+        return NextResponse.json({ success: false, error: 'Evaluasi Juri BMC saat ini sedang ditutup oleh Admin.' }, { status: 400 })
+      }
+      if (assignment.stage === 'PITCHING' && settings && settings.pitching_evaluation_open === false) {
+        return NextResponse.json({ success: false, error: 'Evaluasi Juri Pitching saat ini sedang ditutup oleh Admin.' }, { status: 400 })
+      }
     }
 
     // 2. Check if stage result is locked

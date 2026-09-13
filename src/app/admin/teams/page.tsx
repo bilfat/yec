@@ -23,9 +23,12 @@ interface TeamItem {
   pin: string
   subtheme: string
   createdAt: string
-  // Mock fields for now (Phase 3 & 4)
-  bmcStatus: "NOT_SUBMITTED" | "EVALUATING" | "PASSED" | "FAILED"
-  pitchingStatus: "NOT_ELIGIBLE" | "NOT_SUBMITTED" | "EVALUATING" | "COMPLETED"
+  bmcStatus: string
+  pitchingStatus: string
+  bmcScore: number | null
+  pitchingScore: number | null
+  bmcFile: { id: string, name: string } | null
+  pitchingFile: { id: string, name: string } | null
 }
 
 export default function AdminTeamsPage() {
@@ -67,8 +70,12 @@ export default function AdminTeamsPage() {
         pin: t.pin_code || "------",
         subtheme: t.subthemes?.name || "-",
         createdAt: new Date(t.created_at).toLocaleDateString('id-ID'),
-        bmcStatus: "NOT_SUBMITTED",
-        pitchingStatus: "NOT_ELIGIBLE"
+        bmcStatus: t.bmcStatus,
+        pitchingStatus: t.pitchingStatus,
+        bmcScore: t.bmcScore,
+        pitchingScore: t.pitchingScore,
+        bmcFile: t.bmcFile,
+        pitchingFile: t.pitchingFile
       }))
       setTeams(mapped)
     }
@@ -90,7 +97,6 @@ export default function AdminTeamsPage() {
 
   const handleOpenAddModal = () => {
     setNewTeamName("")
-    setNewTeamSubthemeId(subthemes.length > 0 ? subthemes[0].value : "")
     setIsAddModalOpen(true)
   }
 
@@ -102,8 +108,7 @@ export default function AdminTeamsPage() {
     const res = await fetchApi('/teams', {
       method: 'POST',
       body: JSON.stringify({ 
-        name: newTeamName.trim(),
-        subthemeId: newTeamSubthemeId || null
+        name: newTeamName.trim()
       })
     })
 
@@ -232,14 +237,15 @@ export default function AdminTeamsPage() {
               <TableHead>Nama Tim Peserta</TableHead>
               <TableHead>Sub-tema</TableHead>
               <TableHead>PIN Akses</TableHead>
-              <TableHead>Status Saat Ini</TableHead>
+              <TableHead>Tahap BMC</TableHead>
+              <TableHead>Tahap Pitching</TableHead>
               <TableHead className="text-right print:hidden">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredTeams.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-12 text-yec-text-muted">
+                <TableCell colSpan={6} className="text-center py-12 text-yec-text-muted">
                   Tidak ada data tim yang sesuai pencarian.
                 </TableCell>
               </TableRow>
@@ -271,8 +277,70 @@ export default function AdminTeamsPage() {
                     </div>
                   </TableCell>
 
+                  {/* Tahap BMC */}
                   <TableCell>
-                    <Badge variant="default">Terdaftar</Badge>
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <Badge 
+                          variant={
+                            t.bmcStatus === "Lolos" ? "success" : 
+                            t.bmcStatus === "Tidak Lolos" ? "danger" : 
+                            t.bmcStatus === "Dikumpul" ? "warning" : "default"
+                          }
+                          className="w-fit"
+                        >
+                          {t.bmcStatus}
+                        </Badge>
+                        {t.bmcScore !== null && (
+                          <span className="text-xs font-bold text-yec-brown">{t.bmcScore} / 100</span>
+                        )}
+                      </div>
+                      {t.bmcFile && (
+                        <a 
+                          href={`/api/submissions/${t.bmcFile.id}/view`}
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="flex items-center gap-1 text-[11px] text-yec-amber hover:text-yec-brown transition-colors truncate max-w-[120px]"
+                          title={t.bmcFile.name}
+                        >
+                          <FileText className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{t.bmcFile.name}</span>
+                        </a>
+                      )}
+                    </div>
+                  </TableCell>
+
+                  {/* Tahap Pitching */}
+                  <TableCell>
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <Badge 
+                          variant={
+                            t.pitchingStatus.includes("Juara") && t.pitchingStatus !== "Tidak Juara" ? "success" : 
+                            t.pitchingStatus === "Tidak Juara" ? "default" : 
+                            t.pitchingStatus === "Dikumpul" ? "warning" : "default"
+                          }
+                          className="w-fit"
+                        >
+                          {t.pitchingStatus}
+                        </Badge>
+                        {t.pitchingScore !== null && (
+                          <span className="text-xs font-bold text-yec-brown">{t.pitchingScore} / 100</span>
+                        )}
+                      </div>
+                      {t.pitchingFile && (
+                        <a 
+                          href={`/api/submissions/${t.pitchingFile.id}/view`}
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="flex items-center gap-1 text-[11px] text-yec-amber hover:text-yec-brown transition-colors truncate max-w-[120px]"
+                          title={t.pitchingFile.name}
+                        >
+                          <FileText className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{t.pitchingFile.name}</span>
+                        </a>
+                      )}
+                    </div>
                   </TableCell>
 
                   {/* Actions */}
@@ -318,15 +386,6 @@ export default function AdminTeamsPage() {
               value={newTeamName}
               onChange={(e) => setNewTeamName(e.target.value)}
               required
-            />
-          </FormField>
-          
-          <FormField label="Pilih Sub-tema (Opsional)" htmlFor="addTeamSubtheme">
-            <Select
-              id="addTeamSubtheme"
-              value={newTeamSubthemeId}
-              onChange={(e) => setNewTeamSubthemeId(e.target.value)}
-              options={[{ value: "", label: "Pilih Sub-tema..." }, ...subthemes]}
             />
           </FormField>
 

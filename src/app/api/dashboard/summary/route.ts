@@ -42,8 +42,8 @@ export async function GET() {
     // 6. Recent activities feed (from latest submissions & evaluations)
     const { data: recentSubmissions } = await supabase
       .from('submissions')
-      .select('created_at, stage, original_filename, teams(name)')
-      .order('created_at', { ascending: false })
+      .select('submitted_at, stage, original_filename, teams(name)')
+      .order('submitted_at', { ascending: false })
       .limit(5)
 
     const recentActivities: {
@@ -54,7 +54,7 @@ export async function GET() {
     }[] = (recentSubmissions || []).map((sub: any) => ({
       team: sub.teams?.name || 'Tim Peserta',
       action: `Mengunggah berkas ${sub.stage} (${sub.original_filename})`,
-      time: new Date(sub.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      time: sub.submitted_at ? new Date(sub.submitted_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'Baru saja',
       type: 'info'
     }))
 

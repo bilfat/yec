@@ -24,7 +24,7 @@ export async function GET(request: Request) {
         teams (
           id,
           name,
-          subthemes ( name )
+          subthemes ( name, description )
         ),
         evaluations (
           id,
@@ -54,6 +54,8 @@ export async function GET(request: Request) {
         assignmentId: assignment.id,
         teamName: team?.name || 'Tim Panitia',
         subtheme: team?.subthemes?.name || 'Umum',
+        subthemeTitle: team?.subthemes?.name || 'Belum memilih',
+        subthemeDescription: team?.subthemes?.description || null,
         stage: assignment.stage,
         scope: assignment.assignment_scope,
         status: evaluation?.status || 'PENDING',

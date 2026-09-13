@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { checkAdminAccess } from '@/lib/auth-helpers'
 import { calculateJudgeTotalScore, calculateFinalAggregatedScore } from '@/lib/scoring'
+import { getActiveOrFallbackTemplate } from '@/lib/evaluation-helpers'
 
 export async function GET(request: Request) {
   try {
@@ -12,35 +13,17 @@ export async function GET(request: Request) {
 
     const supabase = createAdminClient()
 
-    // 1. Fetch active template for this stage
-    const { data: template } = await supabase
-      .from('evaluation_templates')
-      .select(`
-        id,
-        criteria (
-          id,
-          name,
-          weight,
-          sort_order,
-          criterion_points (
-            id,
-            name,
-            sort_order
-          )
-        )
-      `)
-      .eq('stage', stage)
-      .eq('active', true)
-      .maybeSingle()
+    // 1. Fetch active or fallback template for this stage
+    const template = await getActiveOrFallbackTemplate(supabase, stage)
 
-    const criteriaList = (template?.criteria || [])
-      .sort((a: any, b: any) => a.sort_order - b.sort_order)
+    const criteriaList = ((template?.criteria as any[]) || [])
+      .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
       .map((c: any) => ({
         id: c.id,
         name: c.name,
         weight: c.weight,
         points: (c.criterion_points || [])
-          .sort((pa: any, pb: any) => pa.sort_order - pb.sort_order)
+          .sort((pa: any, pb: any) => (pa.sort_order || 0) - (pb.sort_order || 0))
           .map((p: any) => ({ id: p.id, name: p.name }))
       }))
 
@@ -85,14 +68,29 @@ export async function GET(request: Request) {
       `)
       .eq('stage', stage)
 
-    // 5. Fetch team_stage_results for this stage
-    const { data: stageResults } = await supabase
+    // 5. Fetch team_stage_results for all stages to check BMC passed status
+    const { data: allStageResults } = await supabase
       .from('team_stage_results')
       .select('*')
-      .eq('stage', stage)
+
+    const bmcPassedTeamIds = new Set(
+      (allStageResults || [])
+        .filter(r => r.stage === 'BMC' && r.result_status === 'PASSED')
+        .map(r => r.team_id)
+    )
+
+    const stageResults = (allStageResults || []).filter(r => r.stage === stage)
+
+    // Filter eligible teams for Pitching stage
+    const eligibleTeams = (teams || []).filter(team => {
+      if (stage === 'PITCHING') {
+        return bmcPassedTeamIds.has(team.id)
+      }
+      return true
+    })
 
     // 6. Assemble team evaluation results
-    const teamResults = (teams || []).map((team: any) => {
+    const teamResults = eligibleTeams.map((team: any) => {
       const teamSub = submissions?.find(s => s.team_id === team.id) || null
       const teamAssigns = assignments?.filter(a => a.team_id === team.id) || []
       const teamResult = stageResults?.find(r => r.team_id === team.id) || null
@@ -149,9 +147,10 @@ export async function GET(request: Request) {
         id: team.id,
         name: team.name,
         subtheme: team.subthemes?.name || 'Umum',
+        submissionId: teamSub?.id || null,
         pdfName: teamSub?.original_filename || 'Belum Unggah',
         pitchingFile: teamSub?.original_filename || 'Belum Unggah',
-        submittedAt: teamSub?.created_at ? new Date(teamSub.created_at).toLocaleString('id-ID') : '-',
+        submittedAt: teamSub?.submitted_at ? new Date(teamSub.submitted_at).toLocaleString('id-ID') : '-',
         judgeCount,
         completedJudgeCount,
         averageScore,

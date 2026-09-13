@@ -47,7 +47,7 @@ export async function GET() {
     // 5. Fetch active subthemes for dropdown
     const { data: activeSubthemes } = await supabase
       .from('subthemes')
-      .select('id, name')
+      .select('id, name, description')
       .eq('active', true)
       .order('sort_order', { ascending: true })
 

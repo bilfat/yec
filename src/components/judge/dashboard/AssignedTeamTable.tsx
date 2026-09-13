@@ -14,6 +14,8 @@ export interface AssignedTeam {
   teamName: string
   stage: StageType
   status: EvaluationStatus
+  subthemeTitle?: string
+  subthemeDescription?: string
 }
 
 interface AssignedTeamTableProps {
@@ -44,6 +46,7 @@ export function AssignedTeamTable({ teams }: AssignedTeamTableProps) {
         <thead className="bg-yec-paper border-b border-[#DDD3C7]">
           <tr>
             <th className="px-6 py-4 font-semibold text-yec-text">Nama Tim</th>
+            <th className="px-6 py-4 font-semibold text-yec-text">Sub-tema</th>
             <th className="px-6 py-4 font-semibold text-yec-text">Tahap</th>
             <th className="px-6 py-4 font-semibold text-yec-text">Status Evaluasi</th>
             <th className="px-6 py-4 font-semibold text-yec-text text-right">Aksi</th>
@@ -53,6 +56,18 @@ export function AssignedTeamTable({ teams }: AssignedTeamTableProps) {
           {teams.map((team) => (
             <tr key={team.assignmentId} className="hover:bg-yec-paper/50 transition-colors">
               <td className="px-6 py-4 font-medium text-yec-text">{team.teamName}</td>
+              <td className="px-6 py-4 whitespace-normal min-w-[250px]">
+                {team.subthemeTitle ? (
+                  <>
+                    <div className="font-semibold text-yec-brown mb-1">{team.subthemeTitle}</div>
+                    <div className="text-xs text-yec-text-secondary leading-tight line-clamp-2" title={team.subthemeDescription}>
+                      {team.subthemeDescription || "Tidak ada keterangan"}
+                    </div>
+                  </>
+                ) : (
+                  <span className="text-yec-text-muted italic text-xs">Belum memilih</span>
+                )}
+              </td>
               <td className="px-6 py-4 text-yec-text-secondary">{team.stage}</td>
               <td className="px-6 py-4">
                 <Badge
