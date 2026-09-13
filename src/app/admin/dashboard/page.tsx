@@ -29,6 +29,7 @@ interface DashboardSummary {
     bmcSubmission: string
     bmcEvaluation: string
     pitching: string
+    pitchingEvaluation?: string
   }
 }
 
@@ -205,9 +206,13 @@ export default function AdminDashboardPage() {
                 <span>Evaluasi Juri BMC</span>
                 <Badge variant={getBadgeVariant(data.stages.bmcEvaluation) as any}>{getStatusLabel(data.stages.bmcEvaluation)}</Badge>
               </div>
-              <div className="flex justify-between items-center py-1">
-                <span>Pitching Stage</span>
+              <div className="flex justify-between items-center py-1 border-b border-white/10">
+                <span>Submisi Pitching</span>
                 <Badge variant={getBadgeVariant(data.stages.pitching) as any}>{getStatusLabel(data.stages.pitching)}</Badge>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span>Evaluasi Juri Pitching</span>
+                <Badge variant={getBadgeVariant(data.stages.pitchingEvaluation || "CLOSED") as any}>{getStatusLabel(data.stages.pitchingEvaluation || "CLOSED")}</Badge>
               </div>
             </div>
           </Card>

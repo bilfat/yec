@@ -81,7 +81,8 @@ export async function GET() {
         stages: {
           bmcSubmission: settings?.bmc_submission_open ? 'OPEN' : 'CLOSED',
           bmcEvaluation: settings?.bmc_evaluation_open ? 'OPEN' : 'CLOSED',
-          pitching: settings?.pitching_submission_open ? 'OPEN' : 'CLOSED'
+          pitching: settings?.pitching_submission_open ? 'OPEN' : 'CLOSED',
+          pitchingEvaluation: settings?.pitching_evaluation_open ? 'OPEN' : 'CLOSED'
         }
       },
       message: 'Berhasil mengambil ikhtisar dashboard admin'

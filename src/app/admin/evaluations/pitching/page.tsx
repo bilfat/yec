@@ -137,7 +137,7 @@ export default function AdminPitchingEvaluationsPage() {
                 id="champ1"
                 value={champ1}
                 onChange={(e) => setChamp1(e.target.value)}
-                options={teams.map((t) => ({ value: t.id, label: `${t.name} (Skor: ${t.averageScore})` }))}
+                options={teams.map((t) => ({ value: t.id, label: `${t.name} (Skor: ${t.averageScore !== null && t.averageScore !== undefined ? t.averageScore : '-'})` }))}
               />
             </FormField>
           </div>
@@ -154,7 +154,7 @@ export default function AdminPitchingEvaluationsPage() {
                 id="champ2"
                 value={champ2}
                 onChange={(e) => setChamp2(e.target.value)}
-                options={teams.map((t) => ({ value: t.id, label: `${t.name} (Skor: ${t.averageScore})` }))}
+                options={teams.map((t) => ({ value: t.id, label: `${t.name} (Skor: ${t.averageScore !== null && t.averageScore !== undefined ? t.averageScore : '-'})` }))}
               />
             </FormField>
           </div>
@@ -171,7 +171,7 @@ export default function AdminPitchingEvaluationsPage() {
                 id="champ3"
                 value={champ3}
                 onChange={(e) => setChamp3(e.target.value)}
-                options={teams.map((t) => ({ value: t.id, label: `${t.name} (Skor: ${t.averageScore})` }))}
+                options={teams.map((t) => ({ value: t.id, label: `${t.name} (Skor: ${t.averageScore !== null && t.averageScore !== undefined ? t.averageScore : '-'})` }))}
               />
             </FormField>
           </div>
@@ -258,7 +258,11 @@ export default function AdminPitchingEvaluationsPage() {
               </div>
               <div className="text-right">
                 <span className="text-xs font-bold text-yec-text-muted uppercase block">Skor Rata-Rata Final</span>
-                <span className="font-display text-3xl font-bold text-yec-amber">{selectedTeamForDetail.averageScore.toFixed(1)}</span>
+                <span className="font-display text-3xl font-bold text-yec-amber">
+                  {selectedTeamForDetail.averageScore !== null && selectedTeamForDetail.averageScore !== undefined
+                    ? Number(selectedTeamForDetail.averageScore).toFixed(1)
+                    : "-"}
+                </span>
               </div>
             </div>
 

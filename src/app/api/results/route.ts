@@ -47,7 +47,7 @@ export async function GET(request: Request) {
       .eq('stage', stage)
 
     // 4. Fetch assignments for this stage joined with evaluations & scores
-    const { data: assignments } = await supabase
+    const { data: rawAssignments } = await supabase
       .from('assignments')
       .select(`
         id,
@@ -68,6 +68,8 @@ export async function GET(request: Request) {
       `)
       .eq('stage', stage)
 
+    let currentAssignments: any[] = rawAssignments || []
+
     // 5. Fetch team_stage_results for all stages to check BMC passed status
     const { data: allStageResults } = await supabase
       .from('team_stage_results')
@@ -78,6 +80,63 @@ export async function GET(request: Request) {
         .filter(r => r.stage === 'BMC' && r.result_status === 'PASSED')
         .map(r => r.team_id)
     )
+
+    // Auto-sync Pitching assignments if stage is PITCHING
+    if (stage === 'PITCHING' && bmcPassedTeamIds.size > 0) {
+      const { data: activeJudges } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'JUDGE')
+        .eq('active', true)
+
+      const passedTeamArray = Array.from(bmcPassedTeamIds)
+      const existingSet = new Set(
+        currentAssignments.map(a => `${a.judge_id}_${a.team_id}`)
+      )
+
+      const missingInserts: any[] = []
+      for (const teamId of passedTeamArray) {
+        for (const judge of (activeJudges || [])) {
+          if (!existingSet.has(`${judge.id}_${teamId}`)) {
+            missingInserts.push({
+              judge_id: judge.id,
+              team_id: teamId,
+              stage: 'PITCHING',
+              assignment_scope: 'ALL'
+            })
+          }
+        }
+      }
+
+      if (missingInserts.length > 0) {
+        await supabase.from('assignments').insert(missingInserts)
+        // Refetch assignments for PITCHING
+        const { data: refreshedAssigns } = await supabase
+          .from('assignments')
+          .select(`
+            id,
+            judge_id,
+            team_id,
+            stage,
+            users ( id, name, role ),
+            evaluations (
+              id,
+              status,
+              notes,
+              submitted_at,
+              evaluation_scores (
+                criterion_point_id,
+                score
+              )
+            )
+          `)
+          .eq('stage', 'PITCHING')
+
+        if (refreshedAssigns) {
+          currentAssignments = refreshedAssigns
+        }
+      }
+    }
 
     const stageResults = (allStageResults || []).filter(r => r.stage === stage)
 
@@ -92,7 +151,7 @@ export async function GET(request: Request) {
     // 6. Assemble team evaluation results
     const teamResults = eligibleTeams.map((team: any) => {
       const teamSub = submissions?.find(s => s.team_id === team.id) || null
-      const teamAssigns = assignments?.filter(a => a.team_id === team.id) || []
+      const teamAssigns = currentAssignments.filter(a => a.team_id === team.id)
       const teamResult = stageResults?.find(r => r.team_id === team.id) || null
 
       const judgeDetails: any[] = []
