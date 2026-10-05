@@ -11,9 +11,10 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { FormField } from "@/components/ui/FormField"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import { fetchApi } from "@/lib/api"
+import { exportEvaluationPdf } from "@/lib/export-pdf"
 import {
   Award, Trophy, Medal, CheckCircle2,
-  Sparkles, Save, Eye, UserCheck, Star, BarChart3, Users
+  Sparkles, Save, Eye, UserCheck, Star, BarChart3, Users, FileText
 } from "lucide-react"
 
 interface JudgeScoreDetail {
@@ -24,6 +25,13 @@ interface JudgeScoreDetail {
   criteriaScores: { name: string; weight: number; score: number }[]
 }
 
+interface CriteriaAverage {
+  id: string
+  name: string
+  weight: number
+  score: number | null
+}
+
 interface PitchingTeam {
   id: string
   name: string
@@ -32,10 +40,13 @@ interface PitchingTeam {
   averageScore: number
   rank: number
   judgeDetails: JudgeScoreDetail[]
+  criteriaAverages?: CriteriaAverage[]
+  combinedNotes?: string
 }
 
 export default function AdminPitchingEvaluationsPage() {
   const [teams, setTeams] = useState<PitchingTeam[]>([])
+  const [templateCriteria, setTemplateCriteria] = useState<{ id: string; name: string; weight: number }[]>([])
   const [champ1, setChamp1] = useState("")
   const [champ2, setChamp2] = useState("")
   const [champ3, setChamp3] = useState("")
@@ -45,14 +56,37 @@ export default function AdminPitchingEvaluationsPage() {
     setIsLoading(true)
     const res = await fetchApi<PitchingTeam[]>('/results?stage=PITCHING')
     if (res.success && res.data) {
-      setTeams(res.data)
-      if (res.data.length >= 3) {
-        setChamp1(res.data[0].id)
-        setChamp2(res.data[1].id)
-        setChamp3(res.data[2].id)
+      // Sort highest to lowest score (teams with null scores at bottom)
+      const sorted = [...res.data].sort((a, b) => {
+        if (a.averageScore === null && b.averageScore === null) return 0
+        if (a.averageScore === null) return 1
+        if (b.averageScore === null) return -1
+        return b.averageScore - a.averageScore
+      })
+      sorted.forEach((t, idx) => {
+        t.rank = idx + 1
+      })
+      setTeams(sorted)
+      if (res.criteria) {
+        setTemplateCriteria(res.criteria)
+      }
+      if (sorted.length >= 3) {
+        setChamp1(sorted[0].id)
+        setChamp2(sorted[1].id)
+        setChamp3(sorted[2].id)
       }
     }
     setIsLoading(false)
+  }
+
+  const handleExportPdf = () => {
+    exportEvaluationPdf({
+      stage: "PITCHING",
+      title: "LEADERBOARD & SKOR DEWAN JURI PITCHING",
+      stageSubtitle: "Tahap Final Presentasi & Pitching Day — Young Entrepreneur Camp 2026",
+      teams,
+      templateCriteria,
+    })
   }
 
   useEffect(() => {
@@ -186,11 +220,24 @@ export default function AdminPitchingEvaluationsPage() {
 
       {/* Leaderboard Rankings Table */}
       <Card className="p-0 overflow-hidden">
-        <div className="p-5 border-b border-[#DDD3C7] bg-yec-paper flex items-center justify-between">
-          <h3 className="font-display font-bold text-lg text-yec-brown">Peringkat & Skor Juri Pitching</h3>
-          <Badge variant="info">
-            <BarChart3 className="h-3.5 w-3.5 mr-1" /> Evaluasi Seluruh Juri (Full-Judge Scope)
-          </Badge>
+        <div className="p-5 border-b border-[#DDD3C7] bg-yec-paper flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display font-bold text-lg text-yec-brown">Peringkat & Skor Juri Pitching</h3>
+            <p className="text-xs text-yec-text-secondary mt-0.5">Urutan tim berdasarkan skor rata-rata dewan juri (tertinggi ke terendah)</p>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExportPdf}
+              className="h-8 px-3 text-xs gap-1.5 text-yec-brown border-[#DDD3C7] hover:bg-yec-amber/10 shadow-sm"
+            >
+              <FileText className="h-3.5 w-3.5 text-yec-amber" /> Export PDF
+            </Button>
+            <Badge variant="info">
+              <BarChart3 className="h-3.5 w-3.5 mr-1" /> Evaluasi Seluruh Juri (Full-Judge Scope)
+            </Badge>
+          </div>
         </div>
         <Table>
           <TableHeader>

@@ -202,6 +202,35 @@ export async function GET(request: Request) {
       const judgeCount = teamAssigns.length
       const isCompleted = judgeCount > 0 && completedJudgeCount === judgeCount
 
+      // Compute aggregated criteria breakdown across all completed judges
+      const completedJudges = judgeDetails.filter(
+        (jd) => jd.totalScore > 0 || (jd.criteriaScores && jd.criteriaScores.length > 0)
+      )
+
+      const criteriaAverages = criteriaList.map((c) => {
+        const scores = completedJudges
+          .map((jd) => jd.criteriaScores.find((cs: any) => cs.name === c.name)?.score)
+          .filter((s): s is number => typeof s === 'number')
+
+        const avg = scores.length > 0
+          ? Math.round((scores.reduce((sum, val) => sum + val, 0) / scores.length) * 10) / 10
+          : null
+
+        return {
+          id: c.id,
+          name: c.name,
+          weight: c.weight,
+          score: avg
+        }
+      })
+
+      const completedJudgesWithNotes = judgeDetails.filter(
+        (jd) => jd.note && jd.note.trim() !== '' && jd.note !== 'Belum memberikan penilaian.'
+      )
+      const combinedNotes = completedJudgesWithNotes
+        .map((jd) => completedJudgesWithNotes.length > 1 ? `[${jd.judgeName}]: ${jd.note}` : jd.note)
+        .join('\n')
+
       return {
         id: team.id,
         name: team.name,
@@ -215,21 +244,32 @@ export async function GET(request: Request) {
         averageScore,
         status: isCompleted ? 'COMPLETED' : 'PENDING',
         resultStatus: teamResult?.result_status || 'UNDECIDED',
-        judgeDetails
+        judgeDetails,
+        criteriaAverages,
+        combinedNotes
       }
     })
 
-    // If PITCHING stage, sort by averageScore descending and attach ranks
-    if (stage === 'PITCHING') {
-      teamResults.sort((a, b) => (b.averageScore || 0) - (a.averageScore || 0))
-      teamResults.forEach((t, idx) => {
-        (t as any).rank = idx + 1
-      })
-    }
+    // Sort all team results by averageScore descending (highest score at top, lowest at bottom).
+    // Teams with null scores are placed at the bottom.
+    teamResults.sort((a, b) => {
+      const scoreA = a.averageScore
+      const scoreB = b.averageScore
+      if (scoreA === null && scoreB === null) return 0
+      if (scoreA === null) return 1
+      if (scoreB === null) return -1
+      return scoreB - scoreA
+    })
+
+    // Assign rank order
+    teamResults.forEach((t, idx) => {
+      (t as any).rank = idx + 1
+    })
 
     return NextResponse.json({
       success: true,
       data: teamResults,
+      criteria: criteriaList.map((c) => ({ id: c.id, name: c.name, weight: c.weight })),
       message: 'Berhasil mengambil data hasil evaluasi'
     })
   } catch (error: any) {

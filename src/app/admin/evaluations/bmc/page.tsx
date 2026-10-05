@@ -8,9 +8,10 @@ import { Modal } from "@/components/ui/Modal"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/Table"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import { fetchApi } from "@/lib/api"
+import { exportEvaluationPdf } from "@/lib/export-pdf"
 import {
   FileCheck, Award, Eye, CheckCircle2,
-  Clock, Check, X, UserCheck, Star, BarChart3
+  Clock, Check, X, UserCheck, Star, BarChart3, FileText
 } from "lucide-react"
 
 interface BmcJudgeDetail {
@@ -19,6 +20,13 @@ interface BmcJudgeDetail {
   totalScore: number
   note: string
   criteriaScores: { name: string; weight: number; score: number }[]
+}
+
+interface CriteriaAverage {
+  id: string
+  name: string
+  weight: number
+  score: number | null
 }
 
 interface BmcEvalTeam {
@@ -33,10 +41,14 @@ interface BmcEvalTeam {
   status: "PENDING" | "COMPLETED"
   resultStatus: "UNDECIDED" | "PASSED" | "FAILED"
   judgeDetails: BmcJudgeDetail[]
+  criteriaAverages?: CriteriaAverage[]
+  combinedNotes?: string
+  rank?: number
 }
 
 export default function AdminBmcEvaluationsPage() {
   const [evalList, setEvalList] = useState<BmcEvalTeam[]>([])
+  const [templateCriteria, setTemplateCriteria] = useState<{ id: string; name: string; weight: number }[]>([])
   const [selectedTeam, setSelectedTeam] = useState<BmcEvalTeam | null>(null)
   const [decisionType, setDecisionType] = useState<"PASSED" | "FAILED" | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
@@ -46,9 +58,32 @@ export default function AdminBmcEvaluationsPage() {
     setIsLoading(true)
     const res = await fetchApi<BmcEvalTeam[]>('/results?stage=BMC')
     if (res.success && res.data) {
-      setEvalList(res.data)
+      // Sort highest to lowest score (teams with null scores at bottom)
+      const sorted = [...res.data].sort((a, b) => {
+        if (a.averageScore === null && b.averageScore === null) return 0
+        if (a.averageScore === null) return 1
+        if (b.averageScore === null) return -1
+        return b.averageScore - a.averageScore
+      })
+      sorted.forEach((t, idx) => {
+        t.rank = idx + 1
+      })
+      setEvalList(sorted)
+      if (res.criteria) {
+        setTemplateCriteria(res.criteria)
+      }
     }
     setIsLoading(false)
+  }
+
+  const handleExportPdf = () => {
+    exportEvaluationPdf({
+      stage: "BMC",
+      title: "REKAPITULASI PENILAIAN & EVALUASI BMC",
+      stageSubtitle: "Tahap Seleksi Business Model Canvas (BMC) — Young Entrepreneur Camp 2026",
+      teams: evalList,
+      templateCriteria,
+    })
   }
 
   useEffect(() => {
@@ -142,15 +177,29 @@ export default function AdminBmcEvaluationsPage() {
 
       {/* Evaluations Table */}
       <Card className="p-0 overflow-hidden">
-        <div className="p-5 border-b border-[#DDD3C7] bg-yec-paper flex items-center justify-between">
-          <h3 className="font-display font-bold text-lg text-yec-brown">Daftar Karya BMC & Status Penilaian Juri</h3>
-          <Badge variant="info">
-            <BarChart3 className="h-3.5 w-3.5 mr-1" /> Evaluasi Multi-Juri
-          </Badge>
+        <div className="p-5 border-b border-[#DDD3C7] bg-yec-paper flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display font-bold text-lg text-yec-brown">Daftar Karya BMC & Status Penilaian Juri</h3>
+            <p className="text-xs text-yec-text-secondary mt-0.5">Urutan otomatis dari total nilai juri tertinggi ke terendah</p>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExportPdf}
+              className="h-8 px-3 text-xs gap-1.5 text-yec-brown border-[#DDD3C7] hover:bg-yec-amber/10 shadow-sm"
+            >
+              <FileText className="h-3.5 w-3.5 text-yec-amber" /> Export PDF
+            </Button>
+            <Badge variant="info">
+              <BarChart3 className="h-3.5 w-3.5 mr-1" /> Evaluasi Multi-Juri
+            </Badge>
+          </div>
         </div>
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-16">Rank</TableHead>
               <TableHead>Nama Tim & Sub-tema</TableHead>
               <TableHead>Berkas BMC</TableHead>
               <TableHead>Progres Juri</TableHead>
@@ -160,8 +209,15 @@ export default function AdminBmcEvaluationsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {evalList.map((t) => (
+            {evalList.map((t, idx) => (
               <TableRow key={t.id}>
+                <TableCell>
+                  <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full font-bold text-xs ${
+                    idx === 0 ? "bg-yec-amber text-white" : idx === 1 ? "bg-[#C0C0C0] text-yec-brown" : idx === 2 ? "bg-[#CD7F32] text-white" : "bg-yec-paper text-yec-text-muted"
+                  }`}>
+                    #{idx + 1}
+                  </span>
+                </TableCell>
                 <TableCell className="font-semibold text-yec-brown">
                   {t.name}
                   <div className="text-xs font-normal text-yec-text-muted">{t.subtheme}</div>

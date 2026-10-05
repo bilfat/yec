@@ -2,6 +2,7 @@
 export interface ApiResponse<T = any> {
   success: boolean
   data?: T
+  criteria?: any
   message?: string
   error?: {
     code: string
@@ -48,6 +49,7 @@ export async function fetchApi<T = any>(endpoint: string, options: RequestInit =
     return {
       success: true,
       data: responseData,
+      criteria: data?.criteria,
       message: data?.message || ''
     }
   } catch (err: unknown) {
